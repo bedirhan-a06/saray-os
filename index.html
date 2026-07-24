@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AboSaray</title>
+<meta name="description" content="AboSaray – deine Abos im Blick.">
+<meta name="theme-color" content="#0d0f14">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AboSaray">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ================= AUTH ================= -->
+<div id="auth-view">
+  <div class="auth-card">
+    <div class="wordmark">
+      <svg width="60" height="44" viewBox="0 0 60 44">
+        <defs>
+          <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f6e7b0"/><stop offset="50%" stop-color="#d4af37"/><stop offset="100%" stop-color="#a97f1f"/>
+          </linearGradient>
+        </defs>
+        <path d="M14 40 Q14 16 30 14 Q46 16 46 40" fill="none" stroke="url(#wg)" stroke-width="3"/>
+        <line x1="30" y1="14" x2="30" y2="7" stroke="url(#wg)" stroke-width="3"/>
+        <circle cx="30" cy="5" r="2.5" fill="url(#wg)"/>
+      </svg>
+      <h1 class="serif gold-text">AboSaray</h1>
+      <p>Deine Abos. Dein Palast. Alles im Blick.</p>
+    </div>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="field">
+      <label>E-Mail</label>
+      <input type="email" id="auth-email" autocomplete="email" placeholder="du@beispiel.de">
+    </div>
+    <div class="field">
+      <label>Passwort</label>
+      <input type="password" id="auth-password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="btn gold block" id="auth-submit">Anmelden</button>
+    <div class="auth-switch" id="auth-switch">
+      Noch kein Konto? <button id="auth-toggle">Registrieren</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app-view" class="hidden">
+  <header class="app-header">
+    <div class="wm">
+      <svg width="30" height="26" viewBox="0 0 60 52">
+        <defs>
+          <linearGradient id="wg2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f6e7b0"/><stop offset="50%" stop-color="#d4af37"/><stop offset="100%" stop-color="#a97f1f"/>
+          </linearGradient>
+        </defs>
+        <path d="M14 48 Q14 22 30 20 Q46 22 46 48" fill="none" stroke="url(#wg2)" stroke-width="4"/>
+        <line x1="30" y1="20" x2="30" y2="11" stroke="url(#wg2)" stroke-width="4"/>
+        <circle cx="30" cy="8" r="3" fill="url(#wg2)"/>
+      </svg>
+      <div>
+        <h1 class="serif gold-text">AboSaray</h1>
+        <div class="date" id="today-label"></div>
+      </div>
+    </div>
+    <button class="btn subtle" id="notif-btn" title="Erinnerungen aktivieren">🔔</button>
+  </header>
+
+  <!-- ===== Tab: Übersicht ===== -->
+  <section id="tab-home">
+    <div class="summary">
+      <div class="stat">
+        <div class="label">Pro Monat</div>
+        <div class="value gold-text" id="monthly-total">–</div>
+        <div class="sub">mein Anteil, Ø monatlich</div>
+      </div>
+      <div class="stat">
+        <div class="label">Pro Jahr</div>
+        <div class="value" id="yearly-total">–</div>
+        <div class="sub">hochgerechnet</div>
+      </div>
+      <div class="stat">
+        <div class="label">Aktive Abos</div>
+        <div class="value" id="sub-count">–</div>
+        <div class="sub">insgesamt</div>
+      </div>
+    </div>
+
+    <div class="budget-bar hidden" id="budget-bar">
+      <div class="row">
+        <span>Monatsbudget</span>
+        <span class="amount" id="budget-amount"></span>
+      </div>
+      <div class="budget-track"><div class="budget-fill" id="budget-fill"></div></div>
+      <div class="budget-hint hidden" id="budget-hint">Budget überschritten!</div>
+    </div>
+
+    <div id="due-banner" class="hint-banner hidden"></div>
+    <div id="savings-banner" class="hint-banner hidden"></div>
+
+    <div class="section-head">
+      <h2>Meine Abos</h2>
+      <button class="btn subtle" id="ics-btn" title="Zahltermine in Kalender exportieren">📅 Export</button>
+    </div>
+    <div class="chip-row" id="cat-filter"></div>
+    <div class="cards" id="cards-container"></div>
+  </section>
+
+  <!-- ===== Tab: Statistik ===== -->
+  <section id="tab-stats" class="hidden">
+    <div class="section-head"><h2>Kosten nach Kategorie</h2></div>
+    <div class="stats-panel">
+      <div class="donut-wrap">
+        <svg id="donut" width="150" height="150" viewBox="0 0 150 150"></svg>
+        <div class="legend" id="donut-legend"></div>
+      </div>
+    </div>
+    <div class="section-head"><h2>Kostenverlauf (kommende Monate)</h2></div>
+    <div class="stats-panel">
+      <div class="bars" id="bars"></div>
+    </div>
+  </section>
+
+  <!-- ===== Tab: Archiv ===== -->
+  <section id="tab-archive" class="hidden">
+    <div class="section-head"><h2>Archivierte Abos</h2></div>
+    <div class="cards" id="archive-container"></div>
+  </section>
+
+  <!-- ===== Tab: Einstellungen ===== -->
+  <section id="tab-settings" class="hidden">
+    <div class="section-head"><h2>Einstellungen</h2></div>
+
+    <div class="settings-group">
+      <h3>Erinnerungen</h3>
+      <div class="setting-row">
+        <div>
+          Erinnerungen
+          <div class="desc">Beim Öffnen der App an fällige Abos erinnern</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="set-reminders"><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          Vorlaufzeit
+          <div class="desc">So viele Tage vorher erinnern</div>
+        </div>
+        <select id="set-leaddays">
+          <option value="1">1 Tag</option>
+          <option value="3">3 Tage</option>
+          <option value="7">7 Tage</option>
+          <option value="14">14 Tage</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          Push-Benachrichtigungen
+          <div class="desc">Systemberechtigung für Mitteilungen</div>
+        </div>
+        <button class="btn" id="set-push">Aktivieren</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>Darstellung</h3>
+      <div class="setting-row">
+        <div>Sortierung</div>
+        <select id="set-sort">
+          <option value="next_payment">Nächste Zahlung</option>
+          <option value="name">Name</option>
+          <option value="price">Preis</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>Währung</div>
+        <select id="set-currency">
+          <option value="EUR">€ Euro</option>
+          <option value="USD">$ US-Dollar</option>
+          <option value="CHF">CHF Franken</option>
+          <option value="TRY">₺ Lira</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>Budget</h3>
+      <div class="setting-row">
+        <div>
+          Monatsbudget
+          <div class="desc">Leer lassen = kein Limit</div>
+        </div>
+        <input type="number" id="set-budget" min="0" step="1" placeholder="z. B. 150">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>Konto</h3>
+      <div class="setting-row">
+        <div>Angemeldet als<div class="desc" id="acct-email"></div></div>
+      </div>
+      <div class="setting-row">
+        <div>E-Mail ändern</div>
+        <button class="btn" id="change-email-btn">Ändern</button>
+      </div>
+      <div class="setting-row">
+        <div>Passwort ändern</div>
+        <button class="btn" id="change-pw-btn">Ändern</button>
+      </div>
+      <div class="setting-row">
+        <div>Abmelden</div>
+        <button class="btn danger" id="logout-btn">Logout</button>
+      </div>
+    </div>
+  </section>
+
+  <button class="fab" id="add-btn" title="Abo hinzufügen">+</button>
+
+  <nav class="tabbar">
+    <button data-tab="home" class="active"><span class="ti">🏠</span>Übersicht</button>
+    <button data-tab="stats"><span class="ti">📊</span>Statistik</button>
+    <button data-tab="archive"><span class="ti">🗄️</span>Archiv</button>
+    <button data-tab="settings"><span class="ti">⚙️</span>Einstellungen</button>
+  </nav>
+</div>
+
+<!-- ================= Abo-Modal ================= -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modal-title">Abo hinzufügen</h2>
+    <div class="row2">
+      <div class="field" style="max-width:76px;">
+        <label>Icon</label>
+        <input type="text" id="f-icon" maxlength="4" placeholder="📦">
+      </div>
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="f-name" placeholder="z. B. Netflix">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Preis</label>
+        <input type="number" id="f-price" step="0.01" min="0" inputmode="decimal" placeholder="9,99">
+      </div>
+      <div class="field">
+        <label>Zyklus</label>
+        <select id="f-cycle">
+          <option value="1">Monatlich</option>
+          <option value="3">Alle 3 Monate</option>
+          <option value="6">Alle 6 Monate</option>
+          <option value="12">Jährlich</option>
+          <option value="custom">Andere …</option>
+        </select>
+      </div>
+    </div>
+    <div class="field hidden" id="f-custom-wrap">
+      <label>Alle wie viele Monate?</label>
+      <input type="number" id="f-custom-months" min="1" step="1" placeholder="2">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Nächste Zahlung</label>
+        <input type="date" id="f-next">
+      </div>
+      <div class="field">
+        <label>Kategorie</label>
+        <select id="f-category"></select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Geteilt mit … Personen (inkl. dir)</label>
+        <input type="number" id="f-shared" min="1" step="1" value="1">
+      </div>
+      <div class="field">
+        <label>Notiz (optional)</label>
+        <input type="text" id="f-note" placeholder="z. B. inkl. MwSt.">
+      </div>
+    </div>
+    <div class="price-history hidden" id="f-history"></div>
+    <div class="modal-actions">
+      <button class="btn" id="cancel-btn">Abbrechen</button>
+      <button class="btn gold" id="submit-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="vendor-supabase.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
