@@ -1,5 +1,5 @@
 /* AboSaray Service Worker – Offline-Cache + Benachrichtigungen */
-const CACHE = "abosaray-v1";
+const CACHE = "abosaray-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./app.js",
   "./vendor-supabase.js",
   "./manifest.webmanifest",
+  "./icons/icon.svg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-180.png"

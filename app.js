@@ -32,12 +32,25 @@ let dismissedSavings = false;
 const $ = (id) => document.getElementById(id);
 function fmt(n) {
   const cur = profile?.currency || "EUR";
-  return n.toLocaleString(CURRENCY_LOCALE[cur] || "de-DE", { style: "currency", currency: cur });
+  // Postgres liefert numeric als String ("10.00") – ohne Number() ignoriert
+  // toLocaleString die Optionen und der Betrag käme unformatiert durch.
+  const v = Number(n);
+  if (!isFinite(v)) return "–";
+  return v.toLocaleString(CURRENCY_LOCALE[cur] || "de-DE", { style: "currency", currency: cur });
 }
 function fmtDate(d) {
   return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 function todayMidnight() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
+// Monate addieren ohne Überlauf: der 31.01. + 1 Monat ergibt den 28./29.02., nicht den 02./03.03.
+// anchorDay hält den ursprünglichen Stichtag fest, damit das Datum nicht Monat für Monat wandert.
+function addMonths(date, months, anchorDay) {
+  const y = date.getFullYear();
+  const m = date.getMonth() + months;
+  const day = anchorDay || date.getDate();
+  const lastDayOfTarget = new Date(y, m + 1, 0).getDate();
+  return new Date(y, m, Math.min(day, lastDayOfTarget));
+}
 function ownShareMonthly(s) { return s.price / s.cycle_months / (s.shared_with_count || 1); }
 function cycleText(m) { return m === 1 ? "/ Monat" : m === 12 ? "/ Jahr" : `/ ${m} Monate`; }
 function esc(str) { const d = document.createElement("div"); d.textContent = str ?? ""; return d.innerHTML; }
@@ -88,6 +101,11 @@ async function doAuth() {
       const { data, error } = await db.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
       if (error) throw error;
       if (data.session) { user = data.user; await enterApp(); }
+      // Bei bereits registrierter E-Mail meldet Supabase absichtlich Erfolg (Schutz vor
+      // dem Abklappern fremder Adressen) und verschickt nichts – erkennbar an leerem identities.
+      else if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        $("auth-error").textContent = "Diese E-Mail ist bereits registriert. Melde dich an – oder setze dein Passwort zurück.";
+      }
       else $("auth-error").textContent = "Fast geschafft! Bitte bestätige deine E-Mail über den Link in deinem Postfach und melde dich dann an.";
     } else {
       const { data, error } = await db.auth.signInWithPassword({ email, password });
@@ -147,7 +165,13 @@ async function loadProfile() {
 async function loadSubs() {
   const { data, error } = await db.from("subscriptions").select("*").order("next_payment");
   if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
-  subs = data || [];
+  // numeric/int kommen als String aus PostgREST – einmal beim Laden sauber machen
+  subs = (data || []).map((s) => ({
+    ...s,
+    price: Number(s.price),
+    cycle_months: Number(s.cycle_months),
+    shared_with_count: Number(s.shared_with_count) || 1
+  }));
   const ids = subs.map((s) => s.id);
   history = {};
   if (ids.length) {
@@ -160,8 +184,11 @@ async function loadSubs() {
 
 async function saveProfile(patch) {
   Object.assign(profile, patch);
-  const { error } = await db.from("profiles").update({ ...patch, updated_at: new Date().toISOString() }).eq("user_id", user.id);
-  if (error) showToast("Fehler beim Speichern");
+  // upsert statt update: fehlt die Profilzeile, trifft ein update null Zeilen und meldet
+  // trotzdem keinen Fehler – die Einstellung wäre beim nächsten Laden stillschweigend weg.
+  const { error } = await db.from("profiles")
+    .upsert({ ...profile, user_id: user.id, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+  if (error) { showToast("Fehler beim Speichern"); console.error(error); }
 }
 
 /* ================= RENDERING ================= */
@@ -359,11 +386,12 @@ function renderStats() {
   const horizon = new Date(now.getFullYear(), now.getMonth() + 6, 1);
   activeSubs().forEach((s) => {
     let d = new Date(s.next_payment + "T00:00:00");
+    const anchorDay = d.getDate();
     while (d < horizon) {
       const key = `${d.getFullYear()}-${d.getMonth()}`;
       const bucket = months.find((m) => m.key === key);
       if (bucket) bucket.sum += s.price / (s.shared_with_count || 1);
-      d = new Date(d.getFullYear(), d.getMonth() + s.cycle_months, d.getDate());
+      d = addMonths(d, s.cycle_months, anchorDay);
     }
   });
   const max = Math.max(...months.map((m) => m.sum), 1);
@@ -515,10 +543,35 @@ document.querySelectorAll(".tabbar button").forEach((btn) => {
 });
 
 /* ================= KALENDER-EXPORT ================= */
+// In ICS-Textfeldern sind \ ; , und Zeilenumbrüche Sonderzeichen (RFC 5545).
+// Ohne Escaping zerlegt z. B. "9,99 €" oder ein Abo-Name mit Komma das Feld.
+function icsEsc(str) {
+  return String(str ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+// Zeilen über 75 Oktette müssen umgebrochen werden – Fortsetzung beginnt mit einem Leerzeichen.
+function icsFold(line) {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const out = [];
+  let cur = "";
+  for (const ch of line) {                       // pro Zeichen, damit Emojis heil bleiben
+    const limit = out.length === 0 ? 75 : 74;    // Folgezeilen tragen ein führendes Leerzeichen
+    if (enc.encode(cur + ch).length > limit) { out.push(cur); cur = ""; }
+    cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out.join("\r\n ");
+}
+
 $("ics-btn").addEventListener("click", () => {
   const act = activeSubs();
   if (!act.length) { showToast("Keine aktiven Abos"); return; }
   const lead = profile?.lead_days ?? 3;
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const lines = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//AboSaray//DE", "CALSCALE:GREGORIAN"
   ];
@@ -526,20 +579,21 @@ $("ics-btn").addEventListener("click", () => {
     const dt = s.next_payment.replace(/-/g, "");
     lines.push(
       "BEGIN:VEVENT",
-      `UID:abosaray-${s.id}`,
+      `UID:abosaray-${s.id}@abosaray`,
+      `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${dt}`,
       `RRULE:FREQ=MONTHLY;INTERVAL=${s.cycle_months}`,
-      `SUMMARY:${s.icon || "💳"} ${s.name} – ${fmt(s.price)} fällig`,
+      `SUMMARY:${icsEsc(`${s.icon || "💳"} ${s.name} – ${fmt(s.price)} fällig`)}`,
       "BEGIN:VALARM",
       `TRIGGER:-P${lead}D`,
       "ACTION:DISPLAY",
-      `DESCRIPTION:${s.name} wird in ${lead} Tagen abgebucht`,
+      `DESCRIPTION:${icsEsc(`${s.name} wird in ${lead} Tagen abgebucht`)}`,
       "END:VALARM",
       "END:VEVENT"
     );
   });
   lines.push("END:VCALENDAR");
-  const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
+  const blob = new Blob([lines.map(icsFold).join("\r\n")], { type: "text/calendar" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "abosaray-zahltermine.ics";
@@ -566,10 +620,12 @@ async function maybeNotifyDue(force) {
   const due = dueSubs();
   if (!due.length) { if (force) showToast("Aktuell nichts fällig 🎉"); return; }
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  // pro Tag nur einmal benachrichtigen
+  // pro Tag nur einmal benachrichtigen – localStorage, sonst gilt das nur pro Browser-Sitzung
   const key = "abosaray-notified-" + todayMidnight().toISOString().slice(0, 10);
-  if (!force && sessionStorage.getItem(key)) return;
-  sessionStorage.setItem(key, "1");
+  try {
+    if (!force && localStorage.getItem(key) === "1") return;
+    localStorage.setItem(key, "1");
+  } catch (_) { /* Privatmodus o. Ä. – dann eben ohne Merker */ }
   try {
     const reg = await navigator.serviceWorker.ready;
     reg.showNotification("AboSaray – Zahlung steht an", {
