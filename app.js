@@ -42,6 +42,12 @@ function fmtDate(d) {
   return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 function todayMidnight() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
+// Lokales Datum als YYYY-MM-DD. Nicht über toISOString – das rechnet in UTC um
+// und macht aus lokaler Mitternacht den Vortag.
+function toDateStr(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 // Monate addieren ohne Überlauf: der 31.01. + 1 Monat ergibt den 28./29.02., nicht den 02./03.03.
 // anchorDay hält den ursprünglichen Stichtag fest, damit das Datum nicht Monat für Monat wandert.
 function addMonths(date, months, anchorDay) {
@@ -197,6 +203,7 @@ function activeSubs() { return subs.filter((s) => !s.archived); }
 function renderAll() {
   renderSummary();
   renderBudget();
+  renderOverdue();
   renderSavingsHint();
   renderDueBanner();
   renderCatFilter();
@@ -236,6 +243,61 @@ function renderSavingsHint() {
   banner.classList.remove("hidden");
   banner.innerHTML = `💡 <span>Sparpotential? <strong>${esc(stale.map((s) => s.name).join(", "))}</strong> hast du lange nicht angefasst – nutzt du das noch?</span><button id="savings-close">✕</button>`;
   $("savings-close").addEventListener("click", () => { dismissedSavings = true; banner.classList.add("hidden"); });
+}
+
+/* ---- Überfällige Zahltermine ---- */
+function overdueSubs() {
+  const today = todayMidnight();
+  return activeSubs().filter((s) => new Date(s.next_payment + "T00:00:00") < today);
+}
+
+// Nächster Termin, der nicht in der Vergangenheit liegt. Bei mehreren verpassten
+// Zyklen wird so lange weitergezählt, bis das Datum wieder aktuell ist.
+function nextDueDate(s) {
+  const today = todayMidnight();
+  let d = new Date(s.next_payment + "T00:00:00");
+  const anchorDay = d.getDate();
+  let guard = 0;
+  while (d < today && guard++ < 1200) d = addMonths(d, s.cycle_months, anchorDay);
+  return d;
+}
+
+function renderOverdue() {
+  const box = $("overdue-banner");
+  const list = overdueSubs();
+  if (!list.length) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  box.innerHTML =
+    `<div class="ov-head">⏰ ${list.length === 1 ? "Ein Zahltermin ist durch" : list.length + " Zahltermine sind durch"}</div>` +
+    list.map((s) => `
+      <div class="ov-row" data-id="${s.id}">
+        <div class="ov-info">
+          <div class="ov-name">${esc(s.icon || "📦")} ${esc(s.name)}</div>
+          <div class="ov-sub">${fmt(s.price)} · war am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}</div>
+        </div>
+        <div class="ov-actions">
+          <button class="ov-paid">Bezahlt</button>
+          <button class="ov-cancelled">Gekündigt</button>
+        </div>
+      </div>`).join("");
+  box.querySelectorAll(".ov-row").forEach((el) => {
+    const id = el.dataset.id;
+    el.querySelector(".ov-paid").addEventListener("click", () => markPaid(id));
+    el.querySelector(".ov-cancelled").addEventListener("click", () => setArchived(id, true));
+  });
+}
+
+async function markPaid(id) {
+  const s = subs.find((x) => x.id === id);
+  if (!s) return;
+  const next = nextDueDate(s);
+  const { error } = await db.from("subscriptions")
+    .update({ next_payment: toDateStr(next), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) { showToast("Fehler beim Speichern"); console.error(error); return; }
+  showToast(`${s.name}: nächste Zahlung ${fmtDate(next)}`);
+  await loadSubs();
+  renderAll();
 }
 
 function dueSubs() {

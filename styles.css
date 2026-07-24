@@ -185,6 +185,50 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
 }
 .hint-banner button { margin-left: auto; color: var(--warn); opacity: 0.7; font-size: 15px; }
 
+/* ---------- Überfällige Zahltermine ---------- */
+.overdue-panel {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid rgba(242, 112, 122, 0.3);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.overdue-panel .ov-head {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--danger);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.ov-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.overdue-panel .ov-row:last-child { border-bottom: none; padding-bottom: 2px; }
+.ov-info { flex: 1; min-width: 150px; }
+.ov-name { font-weight: 650; font-size: 14.5px; }
+.ov-sub { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+.ov-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.ov-actions button {
+  padding: 7px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  transition: filter 0.15s, transform 0.1s;
+}
+.ov-actions button:active { transform: scale(0.97); }
+.ov-actions .ov-paid { background: var(--gold-grad); color: #14110a; border: none; }
+.ov-actions .ov-paid:hover { filter: brightness(1.06); }
+.ov-actions .ov-cancelled { color: var(--text-dim); }
+.ov-actions .ov-cancelled:hover { color: var(--danger); border-color: rgba(242, 112, 122, 0.35); }
+
 /* ---------- Abschnitt / Filter ---------- */
 .section-head {
   display: flex;
