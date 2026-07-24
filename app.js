@@ -347,7 +347,8 @@ function cardHTML(s, archivedView) {
     : diff <= 21 ? ["mid", `in ${diff} Tagen`]
     : ["far", `in ${diff} Tagen`];
   const catColor = CATEGORIES[s.category] || CATEGORIES.Sonstige;
-  const shared = (s.shared_with_count || 1) > 1;
+  // gespeichert wird die Gesamtzahl inkl. Nutzer – angezeigt werden nur die anderen
+  const others = (s.shared_with_count || 1) - 1;
   const metaParts = [`${fmt(s.price)} ${cycleText(s.cycle_months)}`];
   if (s.note) metaParts.push(s.note);
   return `
@@ -361,10 +362,10 @@ function cardHTML(s, archivedView) {
       </div>
       <div class="right">
         <div class="price">${fmt(ownShareMonthly(s))}/Monat</div>
-        ${shared ? `<div class="share-note">geteilt mit ${s.shared_with_count} · gesamt ${fmt(s.price / s.cycle_months)}/M</div>` : ""}
         <div class="next ${badge[0]}">${fmtDate(next)} · ${badge[1]}</div>
       </div>
     </div>
+    ${others > 0 ? `<div class="share-note">geteilt mit ${others} weiteren ${others === 1 ? "Person" : "Personen"} · gesamt ${fmt(s.price / s.cycle_months)}/M</div>` : ""}
     <div class="card-actions">
       ${archivedView
         ? `<button class="unarchive">↩︎ Reaktivieren</button><button class="del">✕ Endgültig löschen</button>`
@@ -476,7 +477,7 @@ function openModal(id) {
     $("f-price").value = s.price;
     $("f-next").value = s.next_payment;
     $("f-note").value = s.note || "";
-    $("f-shared").value = s.shared_with_count || 1;
+    $("f-shared").value = Math.max(0, (s.shared_with_count || 1) - 1);
     $("f-category").value = s.category;
     if ([1, 3, 6, 12].includes(s.cycle_months)) {
       $("f-cycle").value = String(s.cycle_months);
@@ -495,7 +496,7 @@ function openModal(id) {
     }
   } else {
     ["f-icon", "f-name", "f-price", "f-next", "f-note"].forEach((i) => $(i).value = "");
-    $("f-shared").value = 1;
+    $("f-shared").value = 0;
     $("f-cycle").value = "1";
     $("f-category").value = "Sonstige";
     $("f-custom-wrap").classList.add("hidden");
@@ -525,7 +526,8 @@ $("submit-btn").addEventListener("click", async () => {
     cycle_months: cycle,
     next_payment: next,
     note: $("f-note").value.trim() || null,
-    shared_with_count: Math.max(1, parseInt($("f-shared").value, 10) || 1),
+    // Eingabe zählt die anderen, gespeichert wird inkl. Nutzer (DB verlangt >= 1)
+    shared_with_count: Math.max(0, parseInt($("f-shared").value, 10) || 0) + 1,
     updated_at: new Date().toISOString()
   };
   $("submit-btn").disabled = true;

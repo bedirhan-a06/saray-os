@@ -302,7 +302,13 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
 }
 .card .right { text-align: right; flex-shrink: 0; }
 .card .price { font-weight: 700; font-size: 15px; }
-.card .share-note { font-size: 11px; color: var(--gold-2); margin-top: 1px; }
+.card .share-note {
+  font-size: 11.5px;
+  color: var(--gold-2);
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
 .card .next {
   font-size: 11.5px;
   margin-top: 4px;

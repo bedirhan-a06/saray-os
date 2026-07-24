@@ -1,5 +1,5 @@
 /* AboSaray Service Worker – Offline-Cache + Benachrichtigungen */
-const CACHE = "abosaray-v3";
+const CACHE = "abosaray-v4";
 const ASSETS = [
   "./",
   "./index.html",
