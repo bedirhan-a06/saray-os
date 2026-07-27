@@ -1,4 +1,4 @@
-/* ============ AboSaray – Premium Dark/Gold Theme ============ */
+/* ============ Saray OS – Premium Dark/Gold Theme ============ */
 :root {
   --bg: #0b0d12;
   --bg-2: #10131a;
@@ -28,7 +28,7 @@ html, body {
 }
 body { padding-bottom: env(safe-area-inset-bottom); }
 button { font-family: inherit; cursor: pointer; border: none; outline: none; background: none; color: inherit; }
-input, select {
+input, select, textarea {
   font-family: inherit;
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -38,7 +38,7 @@ input, select {
   font-size: 15px;
   width: 100%;
 }
-input:focus, select:focus { border-color: var(--gold-2); outline: none; }
+input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline: none; }
 .hidden { display: none !important; }
 
 /* ---------- Serif-Wordmark ---------- */
@@ -116,7 +116,16 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
 .auth-switch button { color: var(--gold-2); font-weight: 600; font-size: 13.5px; }
 
 /* ---------- App-Layout ---------- */
-#app-view { max-width: 860px; margin: 0 auto; padding: 22px 16px 110px; }
+/* viewport-fit=cover laesst den Inhalt bis unter die iOS-Statusleiste laufen.
+   Ohne den safe-area-Abstand liegt die Kopfzeile unter Uhrzeit und Akku. */
+#app-view {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: calc(22px + env(safe-area-inset-top))
+           max(16px, env(safe-area-inset-right))
+           110px
+           max(16px, env(safe-area-inset-left));
+}
 .app-header {
   display: flex;
   align-items: center;
@@ -211,7 +220,11 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
 }
 .overdue-panel .ov-row:last-child { border-bottom: none; padding-bottom: 2px; }
 .ov-info { flex: 1; min-width: 150px; }
-.ov-name { font-weight: 650; font-size: 14.5px; }
+.ov-name { font-weight: 650; font-size: 14.5px; display: flex; align-items: center; gap: 9px; }
+/* Im Überfällig-Panel reicht eine kompaktere Kachel */
+.ov-name .icon { width: 28px; height: 28px; border-radius: 9px; font-size: 15px; }
+.ov-name .icon.brand svg { width: 15px; height: 15px; }
+.ov-name .icon.mark { font-size: 10px; }
 .ov-sub { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
 .ov-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .ov-actions button {
@@ -276,7 +289,7 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
 }
 .card.archived { opacity: 0.6; }
 .card-top { display: flex; align-items: center; gap: 13px; }
-.card .icon {
+.icon {
   width: 44px;
   height: 44px;
   border-radius: 13px;
@@ -288,6 +301,20 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
   background: var(--bg-2);
   border: 1px solid var(--border-gold);
 }
+/* Marken-Logo bzw. Kürzel: Kachel nimmt die Markenfarbe auf.
+   Ohne color-mix-Support bleibt schlicht die goldene Standardkachel stehen. */
+.icon.brand, .icon.mark {
+  background: color-mix(in srgb, var(--brand) 13%, transparent);
+  border-color: color-mix(in srgb, var(--brand) 42%, transparent);
+}
+.icon.brand svg { width: 23px; height: 23px; fill: var(--brand); display: block; }
+.icon.mark {
+  color: var(--brand);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
 .card .info { flex: 1; min-width: 0; }
 .card .name { font-weight: 650; font-size: 15px; }
 .card .meta { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
@@ -338,6 +365,74 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
 .card-actions .del:hover { color: var(--danger); }
 .price-history { margin-top: 9px; font-size: 12px; color: var(--text-dim); }
 .price-history div { padding: 2px 0; }
+
+/* ---------- Notizen ---------- */
+.note-quickadd { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.note-quickadd textarea { resize: none; min-height: 44px; max-height: 200px; overflow-y: auto; }
+.note-quickadd .btn { align-self: flex-end; }
+#note-f-content { resize: vertical; min-height: 130px; }
+
+.notes { display: flex; flex-direction: column; gap: 10px; }
+.note-card {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 13px 15px;
+  cursor: pointer;
+}
+.note-content { font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.note-content .tag-inline { color: var(--gold-2); font-weight: 600; }
+.note-meta { font-size: 11.5px; color: var(--text-dim); margin-top: 8px; }
+
+/* ---------- To-Dos ---------- */
+.todo-quickadd { display: flex; gap: 8px; margin-bottom: 16px; }
+.todo-quickadd input[type="text"] { flex: 1; }
+.todo-quickadd input[type="date"] { width: auto; flex-shrink: 0; max-width: 138px; }
+.todo-quickadd button {
+  flex-shrink: 0;
+  width: 44px;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  padding: 0;
+}
+.todos { display: flex; flex-direction: column; gap: 9px; }
+.todo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 12px 14px;
+}
+.todo-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+}
+.todo-check.checked { background: var(--gold-grad); border-color: transparent; }
+.todo-check.checked::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #14110a;
+}
+.todo-body { flex: 1; min-width: 0; cursor: pointer; }
+.todo-title { font-weight: 600; font-size: 14.5px; }
+.todo-meta { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.todo-meta.soon { color: var(--danger); }
+.todo-meta.mid { color: var(--warn); }
+.todo-row.done { opacity: 0.55; }
+.todo-row.done .todo-title { text-decoration: line-through; }
 
 /* ---------- Statistik ---------- */
 .stats-panel {
@@ -428,12 +523,16 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  font-size: 10.5px;
+  font-size: 9.5px;
   color: var(--text-dim);
   font-weight: 600;
-  min-width: 64px;
+  /* flex:1 statt fixer min-width – bei 6 Tabs teilen sie sich die Breite,
+     statt auf schmalen Handys über den Rand zu laufen. */
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
 }
-.tabbar button .ti { font-size: 20px; }
+.tabbar button .ti { font-size: 18px; }
 .tabbar button.active { color: var(--gold-2); }
 
 /* ---------- FAB ---------- */
@@ -483,9 +582,38 @@ input:focus, select:focus { border-color: var(--gold-2); outline: none; }
   to { transform: translateY(0); opacity: 1; }
 }
 .modal h2 { font-size: 17px; margin-bottom: 16px; }
+/* Für Modals mit Löschen-Button in der Kopfzeile, statt in modal-actions */
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.modal-head h2 { margin-bottom: 16px; }
+.modal-head .btn { padding: 5px 10px; font-size: 12.5px; margin-top: -4px; }
+.btn.danger-text { color: var(--danger); }
 .modal .field { margin-bottom: 13px; }
-.row2 { display: flex; gap: 10px; }
+/* flex-end: bricht ein Label auf zwei Zeilen um, bleiben die Eingabefelder
+   trotzdem auf einer Linie, statt gegeneinander zu verrutschen. */
+.row2 { display: flex; gap: 10px; align-items: flex-end; }
 .row2 .field { flex: 1; }
+/* Icon-Zeile: Vorschaukachel links, sitzt auf Höhe der Eingabefelder */
+.icon-row .icon-preview { flex-shrink: 0; margin-bottom: 13px; }
+/* Erklärtext im Dialog, z. B. was nach dem Absenden passiert */
+.hint-text {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  margin-top: -4px;
+}
+
+/* Live-Umrechnung unter dem Formular, nur sichtbar wenn ein Satz gewählt ist */
+.vat-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 9px 12px;
+  margin-top: -3px;
+}
+.vat-hint strong { color: var(--gold-2); font-weight: 700; }
+
 .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
 .modal-actions .btn { flex: 1; }
 

@@ -1,4 +1,4 @@
-/* ================= AboSaray – App-Logik ================= */
+/* ================= Saray OS – App-Logik ================= */
 "use strict";
 
 /* ---- Supabase (eigenes Projekt von Bedirhan) ---- */
@@ -23,6 +23,11 @@ let profile = null;
 let subs = [];
 let history = {};       // subscription_id -> [{old_price,new_price,changed_at}]
 let editingId = null;
+let todos = [];
+let editingTodoId = null;
+let notes = [];
+let editingNoteId = null;
+let activeNoteTag = "Alle";
 let authMode = "login"; // 'login' | 'register'
 let activeCat = "Alle";
 let activeTab = "home";
@@ -41,6 +46,9 @@ function fmt(n) {
 function fmtDate(d) {
   return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
+function fmtDateTime(d) {
+  return `${fmtDate(d)} · ${d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`;
+}
 function todayMidnight() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
 // Lokales Datum als YYYY-MM-DD. Nicht über toISOString – das rechnet in UTC um
 // und macht aus lokaler Mitternacht den Vortag.
@@ -57,9 +65,84 @@ function addMonths(date, months, anchorDay) {
   const lastDayOfTarget = new Date(y, m + 1, 0).getDate();
   return new Date(y, m, Math.min(day, lastDayOfTarget));
 }
-function ownShareMonthly(s) { return s.price / s.cycle_months / (s.shared_with_count || 1); }
+// Eingetragen wird der Preis so, wie er auf der Rechnung steht. Ist ein
+// MwSt-Satz gesetzt, gilt der Betrag als netto und der Satz kommt oben drauf.
+// Alle Geldrechnungen laufen ueber diese Funktion, nicht ueber s.price.
+function bruttoPreis(s) {
+  return Number(s.price) * (1 + (Number(s.vat_percent) || 0) / 100);
+}
+function ownShareMonthly(s) { return bruttoPreis(s) / s.cycle_months / (s.shared_with_count || 1); }
+// Gemeinsame Ampel für alles mit Fälligkeitsdatum (Abo-Karten und To-Dos):
+// rot/nah, gelb/mittel, grün/fern. dateStr im Format "YYYY-MM-DD".
+function dateBadge(dateStr) {
+  if (!dateStr) return ["far", "ohne Termin"];
+  const today = todayMidnight();
+  const d = new Date(dateStr + "T00:00:00");
+  const diff = Math.round((d - today) / 864e5);
+  return diff < 0 ? ["soon", "überfällig"]
+    : diff === 0 ? ["soon", "heute"]
+    : diff === 1 ? ["soon", "morgen"]
+    : diff <= 7 ? ["soon", `in ${diff} Tagen`]
+    : diff <= 21 ? ["mid", `in ${diff} Tagen`]
+    : ["far", `in ${diff} Tagen`];
+}
 function cycleText(m) { return m === 1 ? "/ Monat" : m === 12 ? "/ Jahr" : `/ ${m} Monate`; }
 function esc(str) { const d = document.createElement("div"); d.textContent = str ?? ""; return d.innerHTML; }
+
+/* ---- Marken-Erkennung (BRANDS kommt aus brands.js) ---- */
+// Manche Marken sind fast schwarz (Steam #000, GitHub #181717) und würden auf dem
+// dunklen Hintergrund verschwinden – solche Farben so weit aufhellen, bis sie tragen.
+function readableTone(hex) {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? [...h].map((c) => c + c).join("") : h;
+  let r = parseInt(full.slice(0, 2), 16),
+      g = parseInt(full.slice(2, 4), 16),
+      b = parseInt(full.slice(4, 6), 16);
+  const lum = () => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  for (let i = 0; i < 24 && lum() < 0.42; i++) {
+    r = Math.round(r + (255 - r) * 0.12);
+    g = Math.round(g + (255 - g) * 0.12);
+    b = Math.round(b + (255 - b) * 0.12);
+  }
+  return `rgb(${r},${g},${b})`;
+}
+// Suchbegriffe einmalig zu Regex kompilieren, statt bei jedem Rendern neu zu bauen.
+BRANDS.forEach((b) => {
+  const safe = b.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  b.re = new RegExp(`(^|[^a-z0-9])${safe}([^a-z0-9]|$)`);
+  b.tone = readableTone(b.color);
+});
+function brandFor(name) {
+  const n = (name || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!n) return null;
+  // BRANDS ist nach Länge sortiert – der erste Treffer ist der spezifischste
+  return BRANDS.find((b) => b.re.test(n)) || null;
+}
+// Kürzel aus dem Namen, wenn weder Logo noch Emoji da ist: "Mein Fitness" -> "MF"
+function initials(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return [...parts[0]].slice(0, 2).join("").toUpperCase();
+  return ([...parts[0]][0] + [...parts[1]][0]).toUpperCase();
+}
+// "📦" war früher der Standardwert – zählt daher als "kein Icon gesetzt"
+function customIcon(s) {
+  const c = (s.icon || "").trim();
+  return c && c !== "📦" ? c : null;
+}
+function iconHTML(s) {
+  const custom = customIcon(s);
+  if (custom) return `<div class="icon">${esc(custom)}</div>`;
+  const b = brandFor(s.name);
+  if (b && b.path) {
+    // Die meisten Logos sind 24x24; Zeichen aus anderen Sammlungen bringen
+    // ihre eigene Groesse mit und stehen dann in box.
+    return `<div class="icon brand" style="--brand:${b.tone}">
+      <svg viewBox="${b.box || "0 0 24 24"}" aria-hidden="true"><path d="${b.path}"/></svg></div>`;
+  }
+  const color = b ? b.tone : (CATEGORIES[s.category] || CATEGORIES.Sonstige);
+  return `<div class="icon mark" style="--brand:${color}">${esc(b ? b.text : initials(s.name))}</div>`;
+}
 function showToast(msg) {
   const t = $("toast");
   t.textContent = msg;
@@ -131,20 +214,86 @@ async function doAuth() {
   }
 }
 
-$("logout-btn").addEventListener("click", async () => { await db.auth.signOut(); });
+$("logout-btn").addEventListener("click", async () => {
+  // Erst abmelden vom Push, sonst bekaeme das Geraet weiter fremde Erinnerungen
+  await unregisterPush();
+  await db.auth.signOut();
+});
 
-$("change-email-btn").addEventListener("click", async () => {
-  const email = prompt("Neue E-Mail-Adresse:");
-  if (!email) return;
-  const { error } = await db.auth.updateUser({ email });
-  showToast(error ? "Fehler: " + error.message : "Bestätigungs-Mail verschickt");
-});
-$("change-pw-btn").addEventListener("click", async () => {
-  const pw = prompt("Neues Passwort (mind. 6 Zeichen):");
-  if (!pw) return;
-  const { error } = await db.auth.updateUser({ password: pw });
-  showToast(error ? "Fehler: " + error.message : "Passwort geändert");
-});
+/* ---- Passwort ändern ---- */
+function openPwDialog() {
+  $("pw-new").value = "";
+  $("pw-again").value = "";
+  $("pw-error").textContent = "";
+  $("pw-overlay").classList.add("open");
+  setTimeout(() => $("pw-new").focus(), 60);
+}
+function closePwDialog() { $("pw-overlay").classList.remove("open"); }
+
+async function savePw() {
+  const neu = $("pw-new").value;
+  const nochmal = $("pw-again").value;
+  const fehler = $("pw-error");
+  // Vor dem Serveraufruf prüfen, damit der Fehler sofort am Feld steht
+  if (neu.length < 6) { fehler.textContent = "Mindestens 6 Zeichen."; $("pw-new").focus(); return; }
+  if (neu !== nochmal) { fehler.textContent = "Die beiden Eingaben stimmen nicht überein."; $("pw-again").focus(); return; }
+  fehler.textContent = "";
+  const btn = $("pw-save");
+  btn.disabled = true;
+  const beschriftung = btn.textContent;
+  btn.textContent = "…";
+  try {
+    const { error } = await db.auth.updateUser({ password: neu });
+    if (error) { fehler.textContent = error.message; return; }
+    closePwDialog();
+    showToast("Passwort geändert");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = beschriftung;
+  }
+}
+$("change-pw-btn").addEventListener("click", openPwDialog);
+$("pw-cancel").addEventListener("click", closePwDialog);
+$("pw-save").addEventListener("click", savePw);
+$("pw-overlay").addEventListener("click", (e) => { if (e.target.id === "pw-overlay") closePwDialog(); });
+$("pw-again").addEventListener("keydown", (e) => { if (e.key === "Enter") savePw(); });
+
+/* ---- E-Mail ändern ---- */
+function openMailDialog() {
+  $("mail-new").value = "";
+  $("mail-error").textContent = "";
+  $("mail-overlay").classList.add("open");
+  setTimeout(() => $("mail-new").focus(), 60);
+}
+function closeMailDialog() { $("mail-overlay").classList.remove("open"); }
+
+async function saveMail() {
+  const email = $("mail-new").value.trim();
+  const fehler = $("mail-error");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { fehler.textContent = "Das sieht nicht nach einer E-Mail-Adresse aus."; return; }
+  if (user && email.toLowerCase() === (user.email || "").toLowerCase()) {
+    fehler.textContent = "Das ist bereits deine Adresse."; return;
+  }
+  fehler.textContent = "";
+  const btn = $("mail-save");
+  btn.disabled = true;
+  const beschriftung = btn.textContent;
+  btn.textContent = "…";
+  try {
+    const { error } = await db.auth.updateUser({ email });
+    if (error) { fehler.textContent = error.message; return; }
+    closeMailDialog();
+    showToast("Bestätigungs-Mails verschickt");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = beschriftung;
+  }
+}
+$("change-email-btn").addEventListener("click", openMailDialog);
+$("mail-cancel").addEventListener("click", closeMailDialog);
+$("mail-save").addEventListener("click", saveMail);
+$("mail-overlay").addEventListener("click", (e) => { if (e.target.id === "mail-overlay") closeMailDialog(); });
+$("mail-new").addEventListener("keydown", (e) => { if (e.key === "Enter") saveMail(); });
 
 /* ================= DATEN ================= */
 async function enterApp() {
@@ -154,9 +303,13 @@ async function enterApp() {
   $("acct-email").textContent = user.email;
   await loadProfile();
   await loadSubs();
+  await loadTodos();
+  await loadNotes();
   bindSettingsUI();
   renderAll();
   maybeNotifyDue();
+  // Push-Anmeldung bei jedem Start auffrischen – iOS laesst sie still verfallen.
+  registerPush().catch((e) => console.warn("Push-Anmeldung:", e));
 }
 
 async function loadProfile() {
@@ -176,7 +329,8 @@ async function loadSubs() {
     ...s,
     price: Number(s.price),
     cycle_months: Number(s.cycle_months),
-    shared_with_count: Number(s.shared_with_count) || 1
+    shared_with_count: Number(s.shared_with_count) || 1,
+    vat_percent: Number(s.vat_percent) || 0
   }));
   const ids = subs.map((s) => s.id);
   history = {};
@@ -186,6 +340,18 @@ async function loadSubs() {
       (history[row.subscription_id] = history[row.subscription_id] || []).push(row);
     });
   }
+}
+
+async function loadTodos() {
+  const { data, error } = await db.from("todos").select("*").order("due_date", { ascending: true, nullsFirst: false });
+  if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
+  todos = data || [];
+}
+
+async function loadNotes() {
+  const { data, error } = await db.from("notes").select("*").order("created_at", { ascending: false });
+  if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
+  notes = data || [];
 }
 
 async function saveProfile(patch) {
@@ -209,6 +375,9 @@ function renderAll() {
   renderCatFilter();
   renderCards();
   renderArchive();
+  renderTodos();
+  renderNoteTagFilter();
+  renderNotes();
   if (activeTab === "stats") renderStats();
 }
 
@@ -234,14 +403,44 @@ function renderBudget() {
   $("budget-hint").classList.toggle("hidden", monthly <= b);
 }
 
+// Volle Monate seit einem Zeitstempel, kalendarisch statt über 30-Tage-Schritte.
+function monateSeit(iso) {
+  if (!iso) return 0;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 0;
+  const heute = new Date();
+  let m = (heute.getFullYear() - d.getFullYear()) * 12 + (heute.getMonth() - d.getMonth());
+  if (heute.getDate() < d.getDate()) m--;   // angefangener Monat zählt nicht
+  return Math.max(0, m);
+}
+
 function renderSavingsHint() {
   const banner = $("savings-banner");
   if (dismissedSavings) { banner.classList.add("hidden"); return; }
-  const cutoff = Date.now() - 180 * 864e5;
-  const stale = activeSubs().filter((s) => new Date(s.updated_at).getTime() < cutoff);
-  if (!stale.length) { banner.classList.add("hidden"); return; }
+  // Früher lief das über updated_at – das springt aber bei jedem "Bezahlt" und
+  // jeder Änderung hoch. Genau die Abos, die still vor sich hin laufen, wurden
+  // dadurch nie erwischt. Maßgeblich ist, seit wann das Abo besteht.
+  const lang = activeSubs()
+    .map((s) => {
+      const monate = monateSeit(s.created_at);
+      return { s, monate, gezahlt: ownShareMonthly(s) * monate };
+    })
+    .filter((k) => k.monate >= 12)
+    .sort((a, b) => b.gezahlt - a.gezahlt);
+
+  if (!lang.length) { banner.classList.add("hidden"); return; }
   banner.classList.remove("hidden");
-  banner.innerHTML = `💡 <span>Sparpotential? <strong>${esc(stale.map((s) => s.name).join(", "))}</strong> hast du lange nicht angefasst – nutzt du das noch?</span><button id="savings-close">✕</button>`;
+  const top = lang[0];
+  const weitere = lang.length - 1;
+  banner.innerHTML =
+    `💡 <span>Sparpotential? <strong>${esc(top.s.name)}</strong> läuft seit ${top.monate} Monaten – ` +
+    `das waren bisher rund <strong>${fmt(top.gezahlt)}</strong>. Brauchst du das noch?` +
+    (weitere > 0
+      ? weitere === 1
+        ? " (ein weiteres Abo läuft ähnlich lang)"
+        : ` (${weitere} weitere Abos laufen ähnlich lang)`
+      : "") +
+    `</span><button id="savings-close">✕</button>`;
   $("savings-close").addEventListener("click", () => { dismissedSavings = true; banner.classList.add("hidden"); });
 }
 
@@ -272,8 +471,8 @@ function renderOverdue() {
     list.map((s) => `
       <div class="ov-row" data-id="${s.id}">
         <div class="ov-info">
-          <div class="ov-name">${esc(s.icon || "📦")} ${esc(s.name)}</div>
-          <div class="ov-sub">${fmt(s.price)} · war am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}</div>
+          <div class="ov-name">${iconHTML(s)}<span>${esc(s.name)}</span></div>
+          <div class="ov-sub">${fmt(bruttoPreis(s))} · war am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}</div>
         </div>
         <div class="ov-actions">
           <button class="ov-paid">Bezahlt</button>
@@ -337,24 +536,19 @@ function sortSubs(list) {
 }
 
 function cardHTML(s, archivedView) {
-  const today = todayMidnight();
   const next = new Date(s.next_payment + "T00:00:00");
-  const diff = Math.round((next - today) / 864e5);
-  const badge = diff < 0 ? ["soon", "überfällig"]
-    : diff === 0 ? ["soon", "heute"]
-    : diff === 1 ? ["soon", "morgen"]
-    : diff <= 7 ? ["soon", `in ${diff} Tagen`]
-    : diff <= 21 ? ["mid", `in ${diff} Tagen`]
-    : ["far", `in ${diff} Tagen`];
+  const badge = dateBadge(s.next_payment);
   const catColor = CATEGORIES[s.category] || CATEGORIES.Sonstige;
   // gespeichert wird die Gesamtzahl inkl. Nutzer – angezeigt werden nur die anderen
   const others = (s.shared_with_count || 1) - 1;
-  const metaParts = [`${fmt(s.price)} ${cycleText(s.cycle_months)}`];
+  const metaParts = [`${fmt(bruttoPreis(s))} ${cycleText(s.cycle_months)}`];
+  // Netto ausweisen, sonst bleibt unklar, woher der krumme Betrag kommt
+  if (s.vat_percent > 0) metaParts.push(`${fmt(s.price)} + ${s.vat_percent} % MwSt`);
   if (s.note) metaParts.push(s.note);
   return `
   <div class="card ${archivedView ? "archived" : ""}" data-id="${s.id}">
     <div class="card-top">
-      <div class="icon">${esc(s.icon || "📦")}</div>
+      ${iconHTML(s)}
       <div class="info">
         <div class="name">${esc(s.name)}</div>
         <div class="meta">${esc(metaParts.join(" · "))}</div>
@@ -365,7 +559,7 @@ function cardHTML(s, archivedView) {
         <div class="next ${badge[0]}">${fmtDate(next)} · ${badge[1]}</div>
       </div>
     </div>
-    ${others > 0 ? `<div class="share-note">geteilt mit ${others} weiteren ${others === 1 ? "Person" : "Personen"} · gesamt ${fmt(s.price / s.cycle_months)}/M</div>` : ""}
+    ${others > 0 ? `<div class="share-note">geteilt mit ${others} weiteren ${others === 1 ? "Person" : "Personen"} · gesamt ${fmt(bruttoPreis(s) / s.cycle_months)}/M</div>` : ""}
     <div class="card-actions">
       ${archivedView
         ? `<button class="unarchive">↩︎ Reaktivieren</button><button class="del">✕ Endgültig löschen</button>`
@@ -453,7 +647,7 @@ function renderStats() {
     while (d < horizon) {
       const key = `${d.getFullYear()}-${d.getMonth()}`;
       const bucket = months.find((m) => m.key === key);
-      if (bucket) bucket.sum += s.price / (s.shared_with_count || 1);
+      if (bucket) bucket.sum += bruttoPreis(s) / (s.shared_with_count || 1);
       d = addMonths(d, s.cycle_months, anchorDay);
     }
   });
@@ -478,6 +672,7 @@ function openModal(id) {
     $("f-next").value = s.next_payment;
     $("f-note").value = s.note || "";
     $("f-shared").value = Math.max(0, (s.shared_with_count || 1) - 1);
+    $("f-vat").value = String(s.vat_percent || 0);
     $("f-category").value = s.category;
     if ([1, 3, 6, 12].includes(s.cycle_months)) {
       $("f-cycle").value = String(s.cycle_months);
@@ -497,14 +692,47 @@ function openModal(id) {
   } else {
     ["f-icon", "f-name", "f-price", "f-next", "f-note"].forEach((i) => $(i).value = "");
     $("f-shared").value = 0;
+    $("f-vat").value = "0";
     $("f-cycle").value = "1";
     $("f-category").value = "Sonstige";
     $("f-custom-wrap").classList.add("hidden");
   }
+  refreshPreview();
+  refreshVatHint();
   $("overlay").classList.add("open");
   setTimeout(() => $("f-name").focus(), 60);
 }
 function closeModal() { $("overlay").classList.remove("open"); editingId = null; }
+
+/* Zeigt live, wie das Abo in der Übersicht aussehen wird */
+function refreshPreview() {
+  $("f-preview").innerHTML = iconHTML({
+    icon: $("f-icon").value,
+    name: $("f-name").value,
+    category: $("f-category").value
+  });
+}
+/* Rechnet sofort vor, was am Ende abgebucht wird – sonst tippt man
+   90 ein und sieht erst nach dem Speichern, ob 107,10 herauskommt. */
+function refreshVatHint() {
+  const el = $("f-vat-hint");
+  const netto = parseFloat($("f-price").value);
+  const satz = Number($("f-vat").value) || 0;
+  if (!satz || isNaN(netto)) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  el.innerHTML = `${fmt(netto)} + ${satz} % MwSt = <strong>${fmt(netto * (1 + satz / 100))}</strong>`;
+}
+$("f-price").addEventListener("input", refreshVatHint);
+$("f-vat").addEventListener("change", refreshVatHint);
+
+$("f-icon").addEventListener("input", refreshPreview);
+$("f-category").addEventListener("change", refreshPreview);
+$("f-name").addEventListener("input", () => {
+  const b = brandFor($("f-name").value);
+  // Kategorie nur vorschlagen, solange der Nutzer selbst noch keine gewählt hat
+  if (b && $("f-category").value === "Sonstige") $("f-category").value = b.cat;
+  refreshPreview();
+});
 
 $("f-cycle").addEventListener("change", (e) => $("f-custom-wrap").classList.toggle("hidden", e.target.value !== "custom"));
 $("add-btn").addEventListener("click", () => openModal(null));
@@ -523,6 +751,8 @@ $("submit-btn").addEventListener("click", async () => {
     icon: $("f-icon").value.trim() || "📦",
     category: $("f-category").value,
     price,
+    // 0 = Preis ist schon der Endbetrag, sonst kommt der Satz obendrauf
+    vat_percent: Number($("f-vat").value) || 0,
     cycle_months: cycle,
     next_payment: next,
     note: $("f-note").value.trim() || null,
@@ -575,6 +805,274 @@ async function deleteSub(id) {
   renderAll();
 }
 
+/* ================= TO-DOS ================= */
+function todoRowHTML(t) {
+  const badge = dateBadge(t.due_date);
+  const sub = t.subscription_id ? subs.find((s) => s.id === t.subscription_id) : null;
+  const metaParts = [t.due_date ? `${fmtDate(new Date(t.due_date + "T00:00:00"))} · ${badge[1]}` : "ohne Termin"];
+  if (sub) metaParts.push(sub.name);
+  return `
+  <div class="todo-row ${t.completed ? "done" : ""}" data-id="${t.id}">
+    <button class="todo-check ${t.completed ? "checked" : ""}" aria-label="Erledigt"></button>
+    <div class="todo-body">
+      <div class="todo-title">${esc(t.title)}</div>
+      <div class="todo-meta ${t.completed ? "" : badge[0]}">${esc(metaParts.join(" · "))}</div>
+    </div>
+  </div>`;
+}
+
+function sortTodos(list) {
+  return [...list].sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;   // offene zuerst
+    if (a.completed) return new Date(b.completed_at) - new Date(a.completed_at);
+    if (!a.due_date && !b.due_date) return 0;
+    if (!a.due_date) return 1;                                      // ohne Termin ans Ende
+    if (!b.due_date) return -1;
+    return new Date(a.due_date) - new Date(b.due_date);
+  });
+}
+
+function renderTodos() {
+  const container = $("todos-container");
+  if (!container) return;
+  // Erledigte bleiben nur bis Tagesende sichtbar (Bestätigung fürs Abhaken),
+  // damit die Liste nicht mit alten Häkchen vollläuft.
+  const heute = toDateStr(todayMidnight());
+  const visible = todos.filter((t) => !t.completed || (t.completed_at && toDateStr(new Date(t.completed_at)) === heute));
+  const sorted = sortTodos(visible);
+  container.innerHTML = sorted.length
+    ? sorted.map(todoRowHTML).join("")
+    : `<div class="empty">Noch keine To-Dos. Trag oben etwas ein.</div>`;
+  container.querySelectorAll(".todo-row").forEach((el) => {
+    const id = el.dataset.id;
+    el.querySelector(".todo-check").addEventListener("click", (e) => { e.stopPropagation(); toggleTodo(id); });
+    el.querySelector(".todo-body").addEventListener("click", () => openTodoModal(id));
+  });
+}
+
+async function quickAddTodo() {
+  const titleEl = $("todo-quick-title");
+  const dateEl = $("todo-quick-date");
+  const title = titleEl.value.trim();
+  if (!title) return;
+  titleEl.disabled = true;
+  try {
+    const { error } = await db.from("todos").insert({ user_id: user.id, title, due_date: dateEl.value || null });
+    if (error) throw error;
+    titleEl.value = "";
+    dateEl.value = "";
+    await loadTodos();
+    renderTodos();
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    titleEl.disabled = false;
+    titleEl.focus();
+  }
+}
+$("todo-quick-add").addEventListener("click", quickAddTodo);
+$("todo-quick-title").addEventListener("keydown", (e) => { if (e.key === "Enter") quickAddTodo(); });
+
+async function toggleTodo(id) {
+  const t = todos.find((x) => x.id === id);
+  if (!t) return;
+  const completed = !t.completed;
+  const patch = { completed, completed_at: completed ? new Date().toISOString() : null, updated_at: new Date().toISOString() };
+  Object.assign(t, patch);   // optimistisch: sofort umschalten, nicht auf den Server warten
+  renderTodos();
+  const { error } = await db.from("todos").update(patch).eq("id", id);
+  if (error) { showToast("Fehler beim Speichern"); console.error(error); await loadTodos(); renderTodos(); }
+}
+
+async function deleteTodo(id) {
+  const t = todos.find((x) => x.id === id);
+  if (!t) return;
+  if (!confirm(`„${t.title}“ wirklich löschen?`)) return;
+  const { error } = await db.from("todos").delete().eq("id", id);
+  if (error) { showToast("Fehler beim Löschen"); return; }
+  closeTodoModal();
+  showToast("Gelöscht");
+  await loadTodos();
+  renderTodos();
+}
+
+function openTodoModal(id) {
+  const t = todos.find((x) => x.id === id);
+  if (!t) return;
+  editingTodoId = id;
+  $("todo-f-title").value = t.title;
+  $("todo-f-date").value = t.due_date || "";
+  $("todo-f-desc").value = t.description || "";
+  $("todo-f-sub").innerHTML = `<option value="">— kein Abo —</option>` +
+    activeSubs().map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+  $("todo-f-sub").value = t.subscription_id || "";
+  $("todo-overlay").classList.add("open");
+  setTimeout(() => $("todo-f-title").focus(), 60);
+}
+function closeTodoModal() { $("todo-overlay").classList.remove("open"); editingTodoId = null; }
+
+async function saveTodoModal() {
+  const title = $("todo-f-title").value.trim();
+  if (!title) { showToast("Bitte einen Titel eingeben"); return; }
+  const patch = {
+    title,
+    due_date: $("todo-f-date").value || null,
+    description: $("todo-f-desc").value.trim() || null,
+    subscription_id: $("todo-f-sub").value || null,
+    updated_at: new Date().toISOString()
+  };
+  const btn = $("todo-save-btn");
+  btn.disabled = true;
+  try {
+    const { error } = await db.from("todos").update(patch).eq("id", editingTodoId);
+    if (error) throw error;
+    closeTodoModal();
+    showToast("Gespeichert");
+    await loadTodos();
+    renderTodos();
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    btn.disabled = false;
+  }
+}
+$("todo-save-btn").addEventListener("click", saveTodoModal);
+$("todo-cancel-btn").addEventListener("click", closeTodoModal);
+$("todo-delete-btn").addEventListener("click", () => deleteTodo(editingTodoId));
+$("todo-overlay").addEventListener("click", (e) => { if (e.target.id === "todo-overlay") closeTodoModal(); });
+
+/* ================= NOTIZEN ================= */
+// #wort im Text wird zum Tag – keine eigene Tag-Eingabe, wird aus dem Inhalt gelesen.
+function extractTags(content) {
+  const matches = content.match(/#([\p{L}\p{N}_]+)/gu) || [];
+  return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
+}
+function noteContentHTML(content) {
+  return esc(content).replace(/#([\p{L}\p{N}_]+)/gu, '<span class="tag-inline">#$1</span>');
+}
+
+function renderNoteTagFilter() {
+  const row = $("note-tag-filter");
+  if (!row) return;
+  const allTags = [...new Set(notes.flatMap((n) => extractTags(n.content)))].sort();
+  if (!allTags.length) { row.classList.add("hidden"); activeNoteTag = "Alle"; return; }
+  row.classList.remove("hidden");
+  const tags = ["Alle", ...allTags];
+  if (!tags.includes(activeNoteTag)) activeNoteTag = "Alle";
+  row.innerHTML = tags.map((t) =>
+    `<button class="chip ${t === activeNoteTag ? "active" : ""}" data-tag="${esc(t)}">${t === "Alle" ? "Alle" : "#" + esc(t)}</button>`
+  ).join("");
+  row.querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
+    activeNoteTag = b.dataset.tag;
+    renderNoteTagFilter();
+    renderNotes();
+  }));
+}
+
+function noteCardHTML(n) {
+  return `
+  <div class="note-card" data-id="${n.id}">
+    <div class="note-content">${noteContentHTML(n.content)}</div>
+    <div class="note-meta">${fmtDateTime(new Date(n.created_at))}</div>
+  </div>`;
+}
+
+function renderNotes() {
+  const container = $("notes-container");
+  if (!container) return;
+  let list = [...notes].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  if (activeNoteTag !== "Alle") list = list.filter((n) => extractTags(n.content).includes(activeNoteTag));
+  container.innerHTML = list.length
+    ? list.map(noteCardHTML).join("")
+    : `<div class="empty">${activeNoteTag !== "Alle" ? "Keine Notizen mit diesem Tag." : "Noch keine Notizen. Trag oben etwas ein."}</div>`;
+  container.querySelectorAll(".note-card").forEach((el) => {
+    el.addEventListener("click", () => openNoteModal(el.dataset.id));
+  });
+}
+
+async function quickAddNote() {
+  const el = $("note-quick-text");
+  const content = el.value.trim();
+  if (!content) return;
+  el.disabled = true;
+  try {
+    const { error } = await db.from("notes").insert({ user_id: user.id, content });
+    if (error) throw error;
+    el.value = "";
+    el.style.height = "";
+    await loadNotes();
+    renderNoteTagFilter();
+    renderNotes();
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    el.disabled = false;
+    el.focus();
+  }
+}
+$("note-quick-add").addEventListener("click", quickAddNote);
+$("note-quick-text").addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") quickAddNote(); });
+// Waechst mit dem Text mit, bis max-height greift – dann eigenes Scrollen (siehe CSS)
+$("note-quick-text").addEventListener("input", (e) => {
+  e.target.style.height = "auto";
+  e.target.style.height = e.target.scrollHeight + "px";
+});
+
+function openNoteModal(id) {
+  const n = notes.find((x) => x.id === id);
+  if (!n) return;
+  editingNoteId = id;
+  $("note-f-content").value = n.content;
+  $("note-overlay").classList.add("open");
+  setTimeout(() => {
+    const ta = $("note-f-content");
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }, 60);
+}
+function closeNoteModal() { $("note-overlay").classList.remove("open"); editingNoteId = null; }
+
+async function saveNoteModal() {
+  const content = $("note-f-content").value.trim();
+  if (!content) { showToast("Notiz ist leer"); return; }
+  const btn = $("note-save-btn");
+  btn.disabled = true;
+  try {
+    const { error } = await db.from("notes").update({ content, updated_at: new Date().toISOString() }).eq("id", editingNoteId);
+    if (error) throw error;
+    closeNoteModal();
+    showToast("Gespeichert");
+    await loadNotes();
+    renderNoteTagFilter();
+    renderNotes();
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteNote(id) {
+  const n = notes.find((x) => x.id === id);
+  if (!n) return;
+  if (!confirm("Notiz wirklich löschen?")) return;
+  const { error } = await db.from("notes").delete().eq("id", id);
+  if (error) { showToast("Fehler beim Löschen"); return; }
+  closeNoteModal();
+  showToast("Gelöscht");
+  await loadNotes();
+  renderNoteTagFilter();
+  renderNotes();
+}
+$("note-save-btn").addEventListener("click", saveNoteModal);
+$("note-cancel-btn").addEventListener("click", closeNoteModal);
+$("note-delete-btn").addEventListener("click", () => deleteNote(editingNoteId));
+$("note-overlay").addEventListener("click", (e) => { if (e.target.id === "note-overlay") closeNoteModal(); });
+
 /* ================= EINSTELLUNGEN ================= */
 function bindSettingsUI() {
   $("set-reminders").checked = !!profile.reminders_enabled;
@@ -593,6 +1091,27 @@ function bindSettingsUI() {
     renderBudget();
   };
   $("set-push").onclick = requestPush;
+  $("set-push-test").onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const vorher = btn.textContent;
+    btn.textContent = "…";
+    try {
+      // Erst sicherstellen, dass dieses Geraet ueberhaupt angemeldet ist
+      if (Notification.permission !== "granted") { await requestPush(); }
+      await registerPush();
+      const r = await pushFn("test");
+      showToast(r.verschickt > 0
+        ? `Probe an ${r.verschickt} Gerät${r.verschickt === 1 ? "" : "e"} geschickt`
+        : "Kein Gerät angemeldet – erst „Aktivieren“ drücken");
+    } catch (err) {
+      console.warn(err);
+      showToast("Test fehlgeschlagen: " + (err.message || err));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = vorher;
+    }
+  };
 }
 
 /* ================= TABS ================= */
@@ -600,7 +1119,7 @@ document.querySelectorAll(".tabbar button").forEach((btn) => {
   btn.addEventListener("click", () => {
     activeTab = btn.dataset.tab;
     document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("active", b === btn));
-    ["home", "stats", "archive", "settings"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== activeTab));
+    ["home", "todos", "notes", "stats", "archive", "settings"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== activeTab));
     $("add-btn").classList.toggle("hidden", activeTab !== "home");
     if (activeTab === "stats") renderStats();
   });
@@ -637,17 +1156,17 @@ $("ics-btn").addEventListener("click", () => {
   const lead = profile?.lead_days ?? 3;
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const lines = [
-    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//AboSaray//DE", "CALSCALE:GREGORIAN"
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Saray OS//DE", "CALSCALE:GREGORIAN"
   ];
   act.forEach((s) => {
     const dt = s.next_payment.replace(/-/g, "");
     lines.push(
       "BEGIN:VEVENT",
-      `UID:abosaray-${s.id}@abosaray`,
+      `UID:sarayos-${s.id}@sarayos`,
       `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${dt}`,
       `RRULE:FREQ=MONTHLY;INTERVAL=${s.cycle_months}`,
-      `SUMMARY:${icsEsc(`${s.icon || "💳"} ${s.name} – ${fmt(s.price)} fällig`)}`,
+      `SUMMARY:${icsEsc(`${customIcon(s) || "💳"} ${s.name} – ${fmt(bruttoPreis(s))} fällig`)}`,
       "BEGIN:VALARM",
       `TRIGGER:-P${lead}D`,
       "ACTION:DISPLAY",
@@ -660,7 +1179,7 @@ $("ics-btn").addEventListener("click", () => {
   const blob = new Blob([lines.map(icsFold).join("\r\n")], { type: "text/calendar" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "abosaray-zahltermine.ics";
+  a.download = "sarayos-zahltermine.ics";
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -668,14 +1187,98 @@ $("ics-btn").addEventListener("click", () => {
 });
 
 /* ================= BENACHRICHTIGUNGEN ================= */
+
+/* ---- Echtes Web Push: kommt auch an, wenn die App zu ist ---- */
+function b64UrlToBytes(s) {
+  const b64 = (s + "=".repeat((4 - (s.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+async function pushFn(action) {
+  const { data, error } = await db.functions.invoke("push", { body: { action } });
+  if (error) throw error;
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+function pushMoeglich() {
+  return "Notification" in window && "PushManager" in window && "serviceWorker" in navigator;
+}
+
+// Meldet dieses Geraet beim Push-Dienst an und hinterlegt das Abo in Supabase.
+// Laeuft bei jedem App-Start, weil iOS Anmeldungen still verfallen laesst.
+async function registerPush() {
+  if (!pushMoeglich() || Notification.permission !== "granted" || !user) return false;
+  const reg = await navigator.serviceWorker.ready;
+
+  const anmelden = async () => {
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const { publicKey } = await pushFn("publicKey");
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64UrlToBytes(publicKey)
+      });
+    }
+    return sub;
+  };
+
+  let sub = await anmelden();
+  let j = sub.toJSON();
+  let { error } = await db.from("push_subscriptions").upsert({
+    user_id: user.id,
+    endpoint: j.endpoint,
+    p256dh: j.keys.p256dh,
+    auth: j.keys.auth,
+    user_agent: navigator.userAgent.slice(0, 300),
+    last_seen_at: new Date().toISOString()
+  }, { onConflict: "endpoint" });
+
+  // Gehoert der Endpunkt noch einem frueheren Nutzer dieses Geraets, blockt RLS.
+  // Dann alte Anmeldung wegwerfen und mit frischem Endpunkt neu anmelden.
+  if (error) {
+    await sub.unsubscribe().catch(() => {});
+    sub = await anmelden();
+    j = sub.toJSON();
+    ({ error } = await db.from("push_subscriptions").upsert({
+      user_id: user.id,
+      endpoint: j.endpoint,
+      p256dh: j.keys.p256dh,
+      auth: j.keys.auth,
+      user_agent: navigator.userAgent.slice(0, 300),
+      last_seen_at: new Date().toISOString()
+    }, { onConflict: "endpoint" }));
+    if (error) throw error;
+  }
+  return true;
+}
+
+async function unregisterPush() {
+  if (!pushMoeglich()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    await db.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+    await sub.unsubscribe();
+  } catch (e) { console.warn(e); }
+}
+
 async function requestPush() {
-  if (!("Notification" in window)) { showToast("Nicht unterstützt auf diesem Gerät"); return; }
+  if (!("Notification" in window)) {
+    showToast("Dieses Gerät unterstützt keine Mitteilungen");
+    return;
+  }
+  if (!pushMoeglich()) {
+    showToast("Am iPhone zuerst über Teilen → „Zum Home-Bildschirm“ öffnen");
+    return;
+  }
   const perm = await Notification.requestPermission();
-  if (perm === "granted") {
-    showToast("Benachrichtigungen aktiviert");
-    maybeNotifyDue(true);
-  } else {
-    showToast("Berechtigung abgelehnt");
+  if (perm !== "granted") { showToast("Berechtigung abgelehnt"); return; }
+  try {
+    await registerPush();
+    showToast("Mitteilungen aktiv – auch bei geschlossener App");
+  } catch (e) {
+    console.warn(e);
+    showToast("Anmeldung fehlgeschlagen: " + (e.message || e));
   }
 }
 $("notif-btn").addEventListener("click", requestPush);
@@ -685,15 +1288,15 @@ async function maybeNotifyDue(force) {
   if (!due.length) { if (force) showToast("Aktuell nichts fällig 🎉"); return; }
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   // pro Tag nur einmal benachrichtigen – localStorage, sonst gilt das nur pro Browser-Sitzung
-  const key = "abosaray-notified-" + todayMidnight().toISOString().slice(0, 10);
+  const key = "sarayos-notified-" + todayMidnight().toISOString().slice(0, 10);
   try {
     if (!force && localStorage.getItem(key) === "1") return;
     localStorage.setItem(key, "1");
   } catch (_) { /* Privatmodus o. Ä. – dann eben ohne Merker */ }
   try {
     const reg = await navigator.serviceWorker.ready;
-    reg.showNotification("AboSaray – Zahlung steht an", {
-      body: due.map((s) => `${s.icon || ""} ${s.name}: ${fmt(s.price)} am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}`).join("\n"),
+    reg.showNotification("Saray OS – Zahlung steht an", {
+      body: due.map((s) => `${customIcon(s) || "•"} ${s.name}: ${fmt(bruttoPreis(s))} am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}`).join("\n"),
       icon: "icons/icon-192.png",
       badge: "icons/icon-192.png"
     });

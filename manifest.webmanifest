@@ -1,7 +1,7 @@
 {
-  "name": "AboSaray",
-  "short_name": "AboSaray",
-  "description": "Deine Abos im Blick – Kosten, Zahltermine und Erinnerungen.",
+  "name": "Saray OS",
+  "short_name": "Saray OS",
+  "description": "Dein Leben im Blick – Notizen, To-Dos, Abos und Erinnerungen.",
   "lang": "de",
   "start_url": "./index.html",
   "scope": "./",

@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>AboSaray</title>
-<meta name="description" content="AboSaray – deine Abos im Blick.">
+<title>Saray OS</title>
+<meta name="description" content="Saray OS – dein Leben im Blick.">
 <meta name="theme-color" content="#0d0f14">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="AboSaray">
+<meta name="apple-mobile-web-app-title" content="Saray OS">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -30,8 +30,8 @@
         <line x1="30" y1="14" x2="30" y2="7" stroke="url(#wg)" stroke-width="3"/>
         <circle cx="30" cy="5" r="2.5" fill="url(#wg)"/>
       </svg>
-      <h1 class="serif gold-text">AboSaray</h1>
-      <p>Deine Abos. Dein Palast. Alles im Blick.</p>
+      <h1 class="serif gold-text">Saray OS</h1>
+      <p>Dein Leben. Dein Palast. Alles im Blick.</p>
     </div>
     <div class="auth-error" id="auth-error"></div>
     <div class="field">
@@ -64,7 +64,7 @@
         <circle cx="30" cy="8" r="3" fill="url(#wg2)"/>
       </svg>
       <div>
-        <h1 class="serif gold-text">AboSaray</h1>
+        <h1 class="serif gold-text">Saray OS</h1>
         <div class="date" id="today-label"></div>
       </div>
     </div>
@@ -110,6 +110,28 @@
     </div>
     <div class="chip-row" id="cat-filter"></div>
     <div class="cards" id="cards-container"></div>
+  </section>
+
+  <!-- ===== Tab: To-Dos ===== -->
+  <section id="tab-todos" class="hidden">
+    <div class="section-head"><h2>Meine To-Dos</h2></div>
+    <div class="todo-quickadd">
+      <input type="text" id="todo-quick-title" placeholder="Neues To-Do eingeben …">
+      <input type="date" id="todo-quick-date" title="Fälligkeit (optional)">
+      <button class="btn gold" id="todo-quick-add" title="Hinzufügen">+</button>
+    </div>
+    <div class="todos" id="todos-container"></div>
+  </section>
+
+  <!-- ===== Tab: Notizen ===== -->
+  <section id="tab-notes" class="hidden">
+    <div class="section-head"><h2>Meine Notizen</h2></div>
+    <div class="note-quickadd">
+      <textarea id="note-quick-text" rows="2" placeholder="Gedanke, Idee, Erinnerung … (#tag geht auch)"></textarea>
+      <button class="btn gold" id="note-quick-add">Speichern</button>
+    </div>
+    <div class="chip-row hidden" id="note-tag-filter"></div>
+    <div class="notes" id="notes-container"></div>
   </section>
 
   <!-- ===== Tab: Statistik ===== -->
@@ -161,9 +183,16 @@
       <div class="setting-row">
         <div>
           Push-Benachrichtigungen
-          <div class="desc">Systemberechtigung für Mitteilungen</div>
+          <div class="desc">Auch bei geschlossener App. Am iPhone erst zum Home-Bildschirm hinzufügen.</div>
         </div>
         <button class="btn" id="set-push">Aktivieren</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          Testmitteilung
+          <div class="desc">Schickt sofort eine Probe an dieses Gerät</div>
+        </div>
+        <button class="btn" id="set-push-test">Senden</button>
       </div>
     </div>
 
@@ -223,6 +252,8 @@
 
   <nav class="tabbar">
     <button data-tab="home" class="active"><span class="ti">🏠</span>Übersicht</button>
+    <button data-tab="todos"><span class="ti">✅</span>To-Dos</button>
+    <button data-tab="notes"><span class="ti">📝</span>Notizen</button>
     <button data-tab="stats"><span class="ti">📊</span>Statistik</button>
     <button data-tab="archive"><span class="ti">🗄️</span>Archiv</button>
     <button data-tab="settings"><span class="ti">⚙️</span>Einstellungen</button>
@@ -233,14 +264,15 @@
 <div class="overlay" id="overlay">
   <div class="modal">
     <h2 id="modal-title">Abo hinzufügen</h2>
-    <div class="row2">
-      <div class="field" style="max-width:76px;">
-        <label>Icon</label>
-        <input type="text" id="f-icon" maxlength="4" placeholder="📦">
-      </div>
+    <div class="row2 icon-row">
+      <div class="icon-preview" id="f-preview" title="So sieht das Abo in der Übersicht aus"></div>
       <div class="field">
         <label>Name</label>
         <input type="text" id="f-name" placeholder="z. B. Netflix">
+      </div>
+      <div class="field" style="max-width:68px;">
+        <label>Icon</label>
+        <input type="text" id="f-icon" maxlength="4" placeholder="auto">
       </div>
     </div>
     <div class="row2">
@@ -275,14 +307,23 @@
     </div>
     <div class="row2">
       <div class="field">
-        <label>Geteilt mit … weiteren Personen</label>
-        <input type="number" id="f-shared" min="0" step="1" value="0">
+        <label>Weitere Personen</label>
+        <input type="number" id="f-shared" min="0" step="1" value="0" placeholder="0" title="Mit wie vielen anderen teilst du das Abo?">
       </div>
       <div class="field">
-        <label>Notiz (optional)</label>
-        <input type="text" id="f-note" placeholder="z. B. inkl. MwSt.">
+        <label>MwSt.</label>
+        <select id="f-vat" title="Kommt die Steuer auf den Preis noch obendrauf?">
+          <option value="0">im Preis</option>
+          <option value="19">+ 19 %</option>
+          <option value="7">+ 7 %</option>
+        </select>
       </div>
     </div>
+    <div class="field">
+      <label>Notiz (optional)</label>
+      <input type="text" id="f-note" placeholder="z. B. Konto Sparkasse">
+    </div>
+    <div class="vat-hint hidden" id="f-vat-hint"></div>
     <div class="price-history hidden" id="f-history"></div>
     <div class="modal-actions">
       <button class="btn" id="cancel-btn">Abbrechen</button>
@@ -291,9 +332,101 @@
   </div>
 </div>
 
+<!-- ================= Notiz bearbeiten ================= -->
+<div class="overlay" id="note-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Notiz bearbeiten</h2>
+      <button class="btn subtle danger-text" id="note-delete-btn">Löschen</button>
+    </div>
+    <div class="field">
+      <textarea id="note-f-content" rows="6" placeholder="Gedanke, Idee, Erinnerung … (#tag geht auch)"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="note-cancel-btn">Abbrechen</button>
+      <button class="btn gold" id="note-save-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= To-Do bearbeiten ================= -->
+<div class="overlay" id="todo-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>To-Do bearbeiten</h2>
+      <button class="btn subtle danger-text" id="todo-delete-btn">Löschen</button>
+    </div>
+    <div class="field">
+      <label>Titel</label>
+      <input type="text" id="todo-f-title" placeholder="z. B. Lizenz dokumentieren">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Fälligkeit</label>
+        <input type="date" id="todo-f-date">
+      </div>
+      <div class="field">
+        <label>Zugehöriges Abo</label>
+        <select id="todo-f-sub">
+          <option value="">— kein Abo —</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Notiz (optional)</label>
+      <input type="text" id="todo-f-desc" placeholder="Details …">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="todo-cancel-btn">Abbrechen</button>
+      <button class="btn gold" id="todo-save-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= Passwort ändern ================= -->
+<div class="overlay" id="pw-overlay">
+  <div class="modal">
+    <h2>Passwort ändern</h2>
+    <div class="auth-error" id="pw-error"></div>
+    <div class="field">
+      <label>Neues Passwort</label>
+      <input type="password" id="pw-new" autocomplete="new-password" placeholder="mindestens 6 Zeichen">
+    </div>
+    <div class="field">
+      <label>Zur Sicherheit nochmal</label>
+      <input type="password" id="pw-again" autocomplete="new-password" placeholder="wiederholen">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="pw-cancel">Abbrechen</button>
+      <button class="btn gold" id="pw-save">Ändern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= E-Mail ändern ================= -->
+<div class="overlay" id="mail-overlay">
+  <div class="modal">
+    <h2>E-Mail ändern</h2>
+    <div class="auth-error" id="mail-error"></div>
+    <div class="field">
+      <label>Neue Adresse</label>
+      <input type="email" id="mail-new" autocomplete="email" placeholder="du@beispiel.de">
+    </div>
+    <div class="hint-text">
+      Zur Bestätigung geht je eine Mail an die alte und die neue Adresse.
+      Die Umstellung greift erst, wenn du beide bestätigt hast.
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="mail-cancel">Abbrechen</button>
+      <button class="btn gold" id="mail-save">Ändern</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="vendor-supabase.js"></script>
+<script src="brands.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
