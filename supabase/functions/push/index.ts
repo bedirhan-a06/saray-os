@@ -144,9 +144,20 @@ async function taeglicherRundlauf() {
       .lte("due_date", plusTage(tag, vorlauf))
       .order("due_date");
 
+    // Projekt-Deadlines im selben Fenster – bis der Status auf fertig springt
+    const { data: deadlines } = await admin
+      .from("projects")
+      .select("name, due_date")
+      .eq("user_id", p.user_id)
+      .neq("status", "fertig")
+      .not("due_date", "is", null)
+      .lte("due_date", plusTage(tag, vorlauf))
+      .order("due_date");
+
     const abos = faellig ?? [];
     const offen = aufgaben ?? [];
-    if (!abos.length && !offen.length) continue;
+    const projekte = deadlines ?? [];
+    if (!abos.length && !offen.length && !projekte.length) continue;
 
     const { data: geraete } = await admin
       .from("push_subscriptions")
@@ -157,19 +168,18 @@ async function taeglicherRundlauf() {
     const teile: string[] = [];
     if (abos.length) teile.push(abos.length === 1 ? "1 Zahlung" : `${abos.length} Zahlungen`);
     if (offen.length) teile.push(offen.length === 1 ? "1 To-Do" : `${offen.length} To-Dos`);
+    if (projekte.length) teile.push(projekte.length === 1 ? "1 Deadline" : `${projekte.length} Deadlines`);
     const titel = teile.join(" · ");
 
+    const wannText = (datum: string) =>
+      datum < tag ? "überfällig" : datum === tag ? "heute" : `am ${alsDeutschesDatum(datum)}`;
     // Preis wie in der App: bei gesetztem MwSt-Satz gilt der Betrag als netto
     const brutto = (s: { price: unknown; vat_percent: unknown }) =>
       Number(s.price) * (1 + (Number(s.vat_percent) || 0) / 100);
     const text = [
       ...abos.map((s) => `${s.name}: ${alsEuro(brutto(s))} am ${alsDeutschesDatum(s.next_payment)}`),
-      ...offen.map((t) => {
-        const wann = t.due_date < tag ? "überfällig"
-          : t.due_date === tag ? "heute"
-          : `am ${alsDeutschesDatum(t.due_date)}`;
-        return `☐ ${t.title} (${wann})`;
-      }),
+      ...offen.map((t) => `☐ ${t.title} (${wannText(t.due_date)})`),
+      ...projekte.map((pr) => `📁 ${pr.name} (${wannText(pr.due_date)})`),
     ].join("\n");
 
     for (const g of geraete) {

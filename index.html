@@ -107,6 +107,13 @@
     <div class="agenda" id="agenda-container"></div>
   </section>
 
+  <!-- ===== Tab: Projekte ===== -->
+  <section id="tab-projekte" class="hidden">
+    <div class="section-head"><h2>Meine Projekte</h2></div>
+    <div class="chip-row" id="project-kind-filter"></div>
+    <div class="cards" id="projects-container"></div>
+  </section>
+
   <!-- ===== Tab: Abos ===== -->
   <section id="tab-abos" class="hidden">
     <div class="section-head">
@@ -115,6 +122,17 @@
     </div>
     <div class="chip-row" id="cat-filter"></div>
     <div class="cards" id="cards-container"></div>
+    <div class="section-head"><h2>Kosten nach Kategorie</h2></div>
+    <div class="stats-panel">
+      <div class="donut-wrap">
+        <svg id="donut" width="150" height="150" viewBox="0 0 150 150"></svg>
+        <div class="legend" id="donut-legend"></div>
+      </div>
+    </div>
+    <div class="section-head"><h2>Kostenverlauf (kommende Monate)</h2></div>
+    <div class="stats-panel">
+      <div class="bars" id="bars"></div>
+    </div>
     <div class="section-head hidden" id="archive-head"><h2>Archiv</h2></div>
     <div class="cards" id="archive-container"></div>
   </section>
@@ -139,21 +157,6 @@
     </div>
     <div class="chip-row hidden" id="note-tag-filter"></div>
     <div class="notes" id="notes-container"></div>
-  </section>
-
-  <!-- ===== Tab: Statistik ===== -->
-  <section id="tab-stats" class="hidden">
-    <div class="section-head"><h2>Kosten nach Kategorie</h2></div>
-    <div class="stats-panel">
-      <div class="donut-wrap">
-        <svg id="donut" width="150" height="150" viewBox="0 0 150 150"></svg>
-        <div class="legend" id="donut-legend"></div>
-      </div>
-    </div>
-    <div class="section-head"><h2>Kostenverlauf (kommende Monate)</h2></div>
-    <div class="stats-panel">
-      <div class="bars" id="bars"></div>
-    </div>
   </section>
 
   <!-- ===== Tab: Einstellungen ===== -->
@@ -253,10 +256,10 @@
 
   <nav class="tabbar">
     <button data-tab="home" class="active"><span class="ti">🏠</span>Übersicht</button>
+    <button data-tab="projekte"><span class="ti">📁</span>Projekte</button>
     <button data-tab="abos"><span class="ti">💳</span>Abos</button>
     <button data-tab="todos"><span class="ti">✅</span>To-Dos</button>
     <button data-tab="notes"><span class="ti">📝</span>Notizen</button>
-    <button data-tab="stats"><span class="ti">📊</span>Statistik</button>
     <button data-tab="settings"><span class="ti">⚙️</span>Einstellungen</button>
   </nav>
 </div>
@@ -333,6 +336,57 @@
   </div>
 </div>
 
+<!-- ================= Projekt anlegen/bearbeiten ================= -->
+<div class="overlay" id="project-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="project-modal-title">Projekt</h2>
+      <button class="btn subtle danger-text" id="project-delete-btn">Löschen</button>
+    </div>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="project-f-name" placeholder="z. B. Crunch &amp; Cream">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Art</label>
+        <select id="project-f-kind">
+          <option value="Kunde">Kunde</option>
+          <option value="Eigenes">Eigenes</option>
+          <option value="Sonstiges">Sonstiges</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <select id="project-f-status">
+          <option value="offen">offen</option>
+          <option value="in Arbeit">in Arbeit</option>
+          <option value="wartet">wartet</option>
+          <option value="fertig">fertig</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Deadline (optional)</label>
+        <input type="date" id="project-f-date">
+      </div>
+      <div class="field">
+        <label>Link (optional)</label>
+        <input type="url" id="project-f-link" placeholder="https://…" inputmode="url">
+      </div>
+    </div>
+    <div class="field">
+      <label>Notiz (optional)</label>
+      <input type="text" id="project-f-note" placeholder="z. B. wartet auf Antwort">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="project-cancel-btn">Abbrechen</button>
+      <button class="btn gold" id="project-save-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= Notiz bearbeiten ================= -->
 <div class="overlay" id="note-overlay">
   <div class="modal">
@@ -367,9 +421,9 @@
         <input type="date" id="todo-f-date">
       </div>
       <div class="field">
-        <label>Zugehöriges Abo</label>
+        <label>Gehört zu</label>
         <select id="todo-f-sub">
-          <option value="">— kein Abo —</option>
+          <option value="">— nichts —</option>
         </select>
       </div>
     </div>

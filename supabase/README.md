@@ -3,8 +3,9 @@
 ## Web Push
 
 Erinnerungen kommen an, auch wenn die App geschlossen ist. Der tägliche
-Rundlauf erinnert an fällige Abo-Zahlungen **und** offene To-Dos mit Datum
-(Überfälliges bleibt drin, bis es abgehakt ist).
+Rundlauf erinnert an fällige Abo-Zahlungen, offene To-Dos mit Datum und
+Projekt-Deadlines (Überfälliges bleibt drin, bis es abgehakt bzw. der
+Projektstatus auf „fertig" gestellt ist).
 
 ### Bestandteile
 

@@ -28,6 +28,9 @@ let editingTodoId = null;
 let notes = [];
 let editingNoteId = null;
 let activeNoteTag = "Alle";
+let projects = [];
+let editingProjectId = null;
+let activeProjectKind = "Alle";
 let authMode = "login"; // 'login' | 'register'
 let activeCat = "Alle";
 let activeTab = "home";
@@ -161,7 +164,7 @@ async function initAuth() {
       await enterApp();
     }
     if (event === "SIGNED_OUT") {
-      user = null; profile = null; subs = [];
+      user = null; profile = null; subs = []; todos = []; notes = []; projects = [];
       $("app-view").classList.add("hidden");
       $("auth-view").classList.remove("hidden");
     }
@@ -305,6 +308,7 @@ async function enterApp() {
   await loadSubs();
   await loadTodos();
   await loadNotes();
+  await loadProjects();
   bindSettingsUI();
   renderAll();
   maybeNotifyDue();
@@ -354,6 +358,12 @@ async function loadNotes() {
   notes = data || [];
 }
 
+async function loadProjects() {
+  const { data, error } = await db.from("projects").select("*").order("created_at", { ascending: false });
+  if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
+  projects = data || [];
+}
+
 async function saveProfile(patch) {
   Object.assign(profile, patch);
   // upsert statt update: fehlt die Profilzeile, trifft ein update null Zeilen und meldet
@@ -378,7 +388,10 @@ function renderAll() {
   renderTodos();
   renderNoteTagFilter();
   renderNotes();
-  if (activeTab === "stats") renderStats();
+  renderProjectKindFilter();
+  renderProjects();
+  // Statistik lebt jetzt im Abos-Tab
+  if (activeTab === "abos") renderStats();
 }
 
 function renderSummary() {
@@ -534,6 +547,12 @@ function agendaItems() {
     // Überfällige To-Dos bleiben stehen, bis sie erledigt sind
     if (d <= grenze) items.push({ art: "todo", datum: d, t });
   });
+  projects.forEach((p) => {
+    if (p.status === "fertig" || !p.due_date) return;
+    const d = new Date(p.due_date + "T00:00:00");
+    // Überfällige Deadlines bleiben stehen, bis der Status umgestellt wird
+    if (d <= grenze) items.push({ art: "projekt", datum: d, p });
+  });
   return items.sort((a, b) => a.datum - b.datum);
 }
 
@@ -569,13 +588,24 @@ function renderAgenda() {
         ${agendaChip(it.s.next_payment, it.datum)}
       </div>`;
     }
-    const sub = it.t.subscription_id ? subs.find((s) => s.id === it.t.subscription_id) : null;
+    if (it.art === "projekt") {
+      return `
+      <div class="agenda-row" data-art="projekt" data-id="${it.p.id}">
+        <div class="icon">📁</div>
+        <div class="agenda-body">
+          <div class="agenda-title">${esc(it.p.name)}</div>
+          <div class="agenda-meta">Projekt · ${esc(it.p.status)}</div>
+        </div>
+        ${agendaChip(it.p.due_date, it.datum)}
+      </div>`;
+    }
+    const zu = todoParentName(it.t);
     return `
     <div class="agenda-row" data-art="todo" data-id="${it.t.id}">
       <button class="todo-check" aria-label="Erledigt"></button>
       <div class="agenda-body">
         <div class="agenda-title">${esc(it.t.title)}</div>
-        <div class="agenda-meta">To-Do${sub ? " · " + esc(sub.name) : ""}</div>
+        <div class="agenda-meta">To-Do${zu ? " · " + esc(zu) : ""}</div>
       </div>
       ${agendaChip(it.t.due_date, it.datum)}
     </div>`;
@@ -585,6 +615,8 @@ function renderAgenda() {
     if (el.dataset.art === "todo") {
       el.querySelector(".todo-check").addEventListener("click", (e) => { e.stopPropagation(); toggleTodo(id); });
       el.querySelector(".agenda-body").addEventListener("click", () => openTodoModal(id));
+    } else if (el.dataset.art === "projekt") {
+      el.addEventListener("click", () => openProjectModal(id));
     } else {
       el.addEventListener("click", () => openModal(id));
     }
@@ -809,7 +841,7 @@ $("f-name").addEventListener("input", () => {
 });
 
 $("f-cycle").addEventListener("change", (e) => $("f-custom-wrap").classList.toggle("hidden", e.target.value !== "custom"));
-$("add-btn").addEventListener("click", () => openModal(null));
+$("add-btn").addEventListener("click", () => activeTab === "projekte" ? openProjectModal(null) : openModal(null));
 $("cancel-btn").addEventListener("click", closeModal);
 $("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") closeModal(); });
 
@@ -880,11 +912,18 @@ async function deleteSub(id) {
 }
 
 /* ================= TO-DOS ================= */
+// Name des verknüpften Projekts oder Abos – ein To-Do hat höchstens eines von beiden
+function todoParentName(t) {
+  if (t.project_id) return projects.find((p) => p.id === t.project_id)?.name || null;
+  if (t.subscription_id) return subs.find((s) => s.id === t.subscription_id)?.name || null;
+  return null;
+}
+
 function todoRowHTML(t) {
   const badge = dateBadge(t.due_date);
-  const sub = t.subscription_id ? subs.find((s) => s.id === t.subscription_id) : null;
+  const zu = todoParentName(t);
   const metaParts = [t.due_date ? `${fmtDate(new Date(t.due_date + "T00:00:00"))} · ${badge[1]}` : "ohne Termin"];
-  if (sub) metaParts.push(sub.name);
+  if (zu) metaParts.push(zu);
   return `
   <div class="todo-row ${t.completed ? "done" : ""}" data-id="${t.id}">
     <button class="todo-check ${t.completed ? "checked" : ""}" aria-label="Erledigt"></button>
@@ -978,9 +1017,17 @@ function openTodoModal(id) {
   $("todo-f-title").value = t.title;
   $("todo-f-date").value = t.due_date || "";
   $("todo-f-desc").value = t.description || "";
-  $("todo-f-sub").innerHTML = `<option value="">— kein Abo —</option>` +
-    activeSubs().map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
-  $("todo-f-sub").value = t.subscription_id || "";
+  // Ein To-Do kann zu einem Projekt ODER einem Abo gehören. Ein Select mit
+  // Gruppen statt zwei Feldern – die Werte tragen ein Präfix (p:/s:), gespeichert
+  // wird weiter in getrennten Spalten.
+  const projektOptionen = sortProjects(projects)
+    .map((p) => `<option value="p:${p.id}">${esc(p.name)}</option>`).join("");
+  const aboOptionen = activeSubs()
+    .map((s) => `<option value="s:${s.id}">${esc(s.name)}</option>`).join("");
+  $("todo-f-sub").innerHTML = `<option value="">— nichts —</option>` +
+    (projektOptionen ? `<optgroup label="Projekte">${projektOptionen}</optgroup>` : "") +
+    (aboOptionen ? `<optgroup label="Abos">${aboOptionen}</optgroup>` : "");
+  $("todo-f-sub").value = t.project_id ? "p:" + t.project_id : t.subscription_id ? "s:" + t.subscription_id : "";
   $("todo-overlay").classList.add("open");
   setTimeout(() => $("todo-f-title").focus(), 60);
 }
@@ -989,11 +1036,13 @@ function closeTodoModal() { $("todo-overlay").classList.remove("open"); editingT
 async function saveTodoModal() {
   const title = $("todo-f-title").value.trim();
   if (!title) { showToast("Bitte einen Titel eingeben"); return; }
+  const zu = $("todo-f-sub").value;   // "", "p:<id>" oder "s:<id>"
   const patch = {
     title,
     due_date: $("todo-f-date").value || null,
     description: $("todo-f-desc").value.trim() || null,
-    subscription_id: $("todo-f-sub").value || null,
+    project_id: zu.startsWith("p:") ? zu.slice(2) : null,
+    subscription_id: zu.startsWith("s:") ? zu.slice(2) : null,
     updated_at: new Date().toISOString()
   };
   const btn = $("todo-save-btn");
@@ -1147,6 +1196,164 @@ $("note-cancel-btn").addEventListener("click", closeNoteModal);
 $("note-delete-btn").addEventListener("click", () => deleteNote(editingNoteId));
 $("note-overlay").addEventListener("click", (e) => { if (e.target.id === "note-overlay") closeNoteModal(); });
 
+/* ================= PROJEKTE ================= */
+const PROJECT_STATUS_CLASS = {
+  "offen": "st-offen",
+  "in Arbeit": "st-arbeit",
+  "wartet": "st-wartet",
+  "fertig": "st-fertig"
+};
+
+function offeneTodosZu(projectId) {
+  return todos.filter((t) => t.project_id === projectId && !t.completed).length;
+}
+
+function renderProjectKindFilter() {
+  const row = $("project-kind-filter");
+  if (!row) return;
+  const present = [...new Set(projects.map((p) => p.kind))];
+  const kinds = ["Alle", ...["Kunde", "Eigenes", "Sonstiges"].filter((k) => present.includes(k))];
+  if (!kinds.includes(activeProjectKind)) activeProjectKind = "Alle";
+  // Chips erst ab zwei echten Arten – ein einziger Filter wäre nur Deko
+  row.classList.toggle("hidden", kinds.length <= 2);
+  row.innerHTML = kinds.map((k) =>
+    `<button class="chip ${k === activeProjectKind ? "active" : ""}" data-kind="${k}">${k === "Kunde" ? "Kunden" : k === "Eigenes" ? "Eigene" : k === "Sonstiges" ? "Sonstige" : k}</button>`
+  ).join("");
+  row.querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
+    activeProjectKind = b.dataset.kind;
+    renderProjectKindFilter();
+    renderProjects();
+  }));
+}
+
+function sortProjects(list) {
+  return [...list].sort((a, b) => {
+    const aFertig = a.status === "fertig", bFertig = b.status === "fertig";
+    if (aFertig !== bFertig) return aFertig ? 1 : -1;      // Fertiges ans Ende
+    if (!!a.due_date !== !!b.due_date) return a.due_date ? -1 : 1;  // Deadlines zuerst
+    if (a.due_date && b.due_date && a.due_date !== b.due_date) return a.due_date < b.due_date ? -1 : 1;
+    return a.name.localeCompare(b.name, "de");
+  });
+}
+
+function projectCardHTML(p) {
+  const metaParts = [p.kind];
+  if (p.due_date && p.status !== "fertig") {
+    metaParts.push(`Deadline ${kurzDatum(new Date(p.due_date + "T00:00:00"))} (${dateBadge(p.due_date)[1]})`);
+  }
+  const offen = offeneTodosZu(p.id);
+  if (offen > 0) metaParts.push(offen === 1 ? "1 To-Do offen" : `${offen} To-Dos offen`);
+  // Link ohne Protokoll anzeigen – der Klick öffnet trotzdem die volle Adresse
+  const linkText = (p.link || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  return `
+  <div class="project-card ${p.status === "fertig" ? "done" : ""}" data-id="${p.id}">
+    <div class="project-top">
+      <div class="project-name">${esc(p.name)}</div>
+      <span class="status-chip ${PROJECT_STATUS_CLASS[p.status] || "st-offen"}">${esc(p.status)}</span>
+    </div>
+    <div class="project-meta">${esc(metaParts.join(" · "))}</div>
+    ${p.note ? `<div class="project-note">${esc(p.note)}</div>` : ""}
+    ${p.link ? `<a class="project-link" href="${esc(p.link)}" target="_blank" rel="noopener">🔗 ${esc(linkText)}</a>` : ""}
+  </div>`;
+}
+
+function renderProjects() {
+  const container = $("projects-container");
+  if (!container) return;
+  let list = sortProjects(projects);
+  if (activeProjectKind !== "Alle") list = list.filter((p) => p.kind === activeProjectKind);
+  container.innerHTML = list.length
+    ? list.map(projectCardHTML).join("")
+    : `<div class="empty">Noch keine Projekte${activeProjectKind !== "Alle" ? " dieser Art" : ""}. Tippe unten rechts auf „+“.</div>`;
+  container.querySelectorAll(".project-card").forEach((el) => {
+    el.addEventListener("click", () => openProjectModal(el.dataset.id));
+    // Der Link soll die Seite öffnen, nicht das Modal
+    el.querySelector(".project-link")?.addEventListener("click", (e) => e.stopPropagation());
+  });
+}
+
+function openProjectModal(id) {
+  editingProjectId = id || null;
+  $("project-modal-title").textContent = id ? "Projekt bearbeiten" : "Projekt anlegen";
+  // Bei Neuanlage gibt es nichts zu löschen
+  $("project-delete-btn").classList.toggle("hidden", !id);
+  if (id) {
+    const p = projects.find((x) => x.id === id);
+    if (!p) return;
+    $("project-f-name").value = p.name;
+    $("project-f-kind").value = p.kind;
+    $("project-f-status").value = p.status;
+    $("project-f-date").value = p.due_date || "";
+    $("project-f-link").value = p.link || "";
+    $("project-f-note").value = p.note || "";
+  } else {
+    $("project-f-name").value = "";
+    $("project-f-kind").value = "Eigenes";
+    $("project-f-status").value = "offen";
+    $("project-f-date").value = "";
+    $("project-f-link").value = "";
+    $("project-f-note").value = "";
+  }
+  $("project-overlay").classList.add("open");
+  setTimeout(() => $("project-f-name").focus(), 60);
+}
+function closeProjectModal() { $("project-overlay").classList.remove("open"); editingProjectId = null; }
+
+async function saveProjectModal() {
+  const name = $("project-f-name").value.trim();
+  if (!name) { showToast("Bitte einen Namen eingeben"); return; }
+  let link = $("project-f-link").value.trim();
+  // "pixelsaray.vercel.app" eingetippt soll trotzdem klickbar sein
+  if (link && !/^https?:\/\//i.test(link)) link = "https://" + link;
+  const row = {
+    name,
+    kind: $("project-f-kind").value,
+    status: $("project-f-status").value,
+    due_date: $("project-f-date").value || null,
+    link: link || null,
+    note: $("project-f-note").value.trim() || null,
+    updated_at: new Date().toISOString()
+  };
+  const btn = $("project-save-btn");
+  btn.disabled = true;
+  try {
+    if (editingProjectId) {
+      const { error } = await db.from("projects").update(row).eq("id", editingProjectId);
+      if (error) throw error;
+      showToast("Gespeichert");
+    } else {
+      const { error } = await db.from("projects").insert({ ...row, user_id: user.id });
+      if (error) throw error;
+      showToast("Projekt angelegt");
+    }
+    closeProjectModal();
+    await loadProjects();
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteProject(id) {
+  const p = projects.find((x) => x.id === id);
+  if (!p) return;
+  const offen = offeneTodosZu(id);
+  if (!confirm(`„${p.name}“ wirklich löschen?${offen ? `\n\n${offen === 1 ? "Das verknüpfte To-Do bleibt" : offen + " verknüpfte To-Dos bleiben"} bestehen, nur die Verknüpfung fällt weg.` : ""}`)) return;
+  const { error } = await db.from("projects").delete().eq("id", id);
+  if (error) { showToast("Fehler beim Löschen"); return; }
+  closeProjectModal();
+  showToast("Gelöscht");
+  await Promise.all([loadProjects(), loadTodos()]);   // To-Dos neu: project_id wurde serverseitig genullt
+  renderAll();
+}
+$("project-save-btn").addEventListener("click", saveProjectModal);
+$("project-cancel-btn").addEventListener("click", closeProjectModal);
+$("project-delete-btn").addEventListener("click", () => deleteProject(editingProjectId));
+$("project-overlay").addEventListener("click", (e) => { if (e.target.id === "project-overlay") closeProjectModal(); });
+
 /* ================= EINSTELLUNGEN ================= */
 function bindSettingsUI() {
   $("set-reminders").checked = !!profile.reminders_enabled;
@@ -1193,10 +1400,11 @@ document.querySelectorAll(".tabbar button").forEach((btn) => {
   btn.addEventListener("click", () => {
     activeTab = btn.dataset.tab;
     document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("active", b === btn));
-    ["home", "abos", "todos", "notes", "stats", "settings"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== activeTab));
-    // Der +-Knopf legt Abos an – To-Dos und Notizen haben ihre eigene Schnelleingabe
-    $("add-btn").classList.toggle("hidden", activeTab !== "abos");
-    if (activeTab === "stats") renderStats();
+    ["home", "projekte", "abos", "todos", "notes", "settings"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== activeTab));
+    // Der +-Knopf legt je nach Tab ein Abo oder Projekt an –
+    // To-Dos und Notizen haben ihre eigene Schnelleingabe
+    $("add-btn").classList.toggle("hidden", activeTab !== "abos" && activeTab !== "projekte");
+    if (activeTab === "abos") renderStats();
   });
 });
 
@@ -1367,10 +1575,19 @@ function dueTodos() {
   return todos.filter((t) => !t.completed && t.due_date && new Date(t.due_date + "T00:00:00") <= grenze);
 }
 
+// Projekt-Deadlines im Erinnerungsfenster – bis der Status auf fertig springt
+function dueProjects() {
+  if (!profile?.reminders_enabled) return [];
+  const grenze = new Date(todayMidnight());
+  grenze.setDate(grenze.getDate() + (profile.lead_days ?? 3));
+  return projects.filter((p) => p.status !== "fertig" && p.due_date && new Date(p.due_date + "T00:00:00") <= grenze);
+}
+
 async function maybeNotifyDue(force) {
   const abos = dueSubs();
   const aufgaben = dueTodos();
-  if (!abos.length && !aufgaben.length) { if (force) showToast("Aktuell nichts fällig 🎉"); return; }
+  const deadlines = dueProjects();
+  if (!abos.length && !aufgaben.length && !deadlines.length) { if (force) showToast("Aktuell nichts fällig 🎉"); return; }
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   // pro Tag nur einmal benachrichtigen – localStorage, sonst gilt das nur pro Browser-Sitzung
   const key = "sarayos-notified-" + todayMidnight().toISOString().slice(0, 10);
@@ -1381,12 +1598,14 @@ async function maybeNotifyDue(force) {
   const teile = [];
   if (abos.length) teile.push(abos.length === 1 ? "1 Zahlung" : `${abos.length} Zahlungen`);
   if (aufgaben.length) teile.push(aufgaben.length === 1 ? "1 To-Do" : `${aufgaben.length} To-Dos`);
+  if (deadlines.length) teile.push(deadlines.length === 1 ? "1 Deadline" : `${deadlines.length} Deadlines`);
   try {
     const reg = await navigator.serviceWorker.ready;
     reg.showNotification(`Saray OS – ${teile.join(" · ")}`, {
       body: [
         ...abos.map((s) => `${customIcon(s) || "💳"} ${s.name}: ${fmt(bruttoPreis(s))} am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}`),
-        ...aufgaben.map((t) => `☐ ${t.title} (${dateBadge(t.due_date)[1]})`)
+        ...aufgaben.map((t) => `☐ ${t.title} (${dateBadge(t.due_date)[1]})`),
+        ...deadlines.map((p) => `📁 ${p.name} (${dateBadge(p.due_date)[1]})`)
       ].join("\n"),
       icon: "icons/icon-192.png",
       badge: "icons/icon-192.png"
