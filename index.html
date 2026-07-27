@@ -141,7 +141,7 @@
   <section id="tab-todos" class="hidden">
     <div class="section-head"><h2>Meine To-Dos</h2></div>
     <div class="todo-quickadd">
-      <input type="text" id="todo-quick-title" placeholder="Neues To-Do eingeben …">
+      <input type="text" id="todo-quick-title" placeholder="Neues To-Do … (#tag geht auch)">
       <input type="date" id="todo-quick-date" title="Fälligkeit (optional)">
       <button class="btn gold" id="todo-quick-add" title="Hinzufügen">+</button>
     </div>
@@ -332,6 +332,17 @@
     <div class="modal-actions">
       <button class="btn" id="cancel-btn">Abbrechen</button>
       <button class="btn gold" id="submit-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= Tag-Ansicht: alles zu einem #tag ================= -->
+<div class="overlay" id="tag-overlay">
+  <div class="modal">
+    <h2 id="tag-view-title" class="gold-text">#tag</h2>
+    <div id="tag-view-body"></div>
+    <div class="modal-actions">
+      <button class="btn block" id="tag-close-btn">Schließen</button>
     </div>
   </div>
 </div>

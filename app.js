@@ -92,6 +92,20 @@ function dateBadge(dateStr) {
 function cycleText(m) { return m === 1 ? "/ Monat" : m === 12 ? "/ Jahr" : `/ ${m} Monate`; }
 function esc(str) { const d = document.createElement("div"); d.textContent = str ?? ""; return d.innerHTML; }
 
+/* ---- Tags: #wort in beliebigem Text wird zum app-weiten Querverweis ---- */
+// Ein Mechanismus für alles: Notiz-Inhalt, To-Do-Titel, Abo- und Projekt-Notiz.
+// Keine eigene Spalte – der Text selbst trägt die Verknüpfung.
+function extractTags(content) {
+  const matches = (content || "").match(/#([\p{L}\p{N}_]+)/gu) || [];
+  return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
+}
+// Erst escapen, dann markieren – so bleibt eingebettetes HTML wirkungslos.
+function tagTextHTML(text) {
+  return esc(text).replace(/#([\p{L}\p{N}_]+)/gu,
+    (m, wort) => `<span class="tag-inline" data-tag="${wort.toLowerCase()}">#${wort}</span>`);
+}
+function todoTags(t) { return extractTags(`${t.title} ${t.description || ""}`); }
+
 /* ---- Marken-Erkennung (BRANDS kommt aus brands.js) ---- */
 // Manche Marken sind fast schwarz (Steam #000, GitHub #181717) und würden auf dem
 // dunklen Hintergrund verschwinden – solche Farben so weit aufhellen, bis sie tragen.
@@ -604,7 +618,7 @@ function renderAgenda() {
     <div class="agenda-row" data-art="todo" data-id="${it.t.id}">
       <button class="todo-check" aria-label="Erledigt"></button>
       <div class="agenda-body">
-        <div class="agenda-title">${esc(it.t.title)}</div>
+        <div class="agenda-title">${tagTextHTML(it.t.title)}</div>
         <div class="agenda-meta">To-Do${zu ? " · " + esc(zu) : ""}</div>
       </div>
       ${agendaChip(it.t.due_date, it.datum)}
@@ -647,17 +661,18 @@ function cardHTML(s, archivedView) {
   const catColor = CATEGORIES[s.category] || CATEGORIES.Sonstige;
   // gespeichert wird die Gesamtzahl inkl. Nutzer – angezeigt werden nur die anderen
   const others = (s.shared_with_count || 1) - 1;
-  const metaParts = [`${fmt(bruttoPreis(s))} ${cycleText(s.cycle_months)}`];
+  // Teile einzeln escapen statt am Ende gesammelt – die Notiz darf Tag-Markup tragen
+  const metaParts = [esc(`${fmt(bruttoPreis(s))} ${cycleText(s.cycle_months)}`)];
   // Netto ausweisen, sonst bleibt unklar, woher der krumme Betrag kommt
-  if (s.vat_percent > 0) metaParts.push(`${fmt(s.price)} + ${s.vat_percent} % MwSt`);
-  if (s.note) metaParts.push(s.note);
+  if (s.vat_percent > 0) metaParts.push(esc(`${fmt(s.price)} + ${s.vat_percent} % MwSt`));
+  if (s.note) metaParts.push(tagTextHTML(s.note));
   return `
   <div class="card ${archivedView ? "archived" : ""}" data-id="${s.id}">
     <div class="card-top">
       ${iconHTML(s)}
       <div class="info">
         <div class="name">${esc(s.name)}</div>
-        <div class="meta">${esc(metaParts.join(" · "))}</div>
+        <div class="meta">${metaParts.join(" · ")}</div>
         <span class="cat-tag" style="background:${catColor}22;color:${catColor};">${esc(s.category)}</span>
       </div>
       <div class="right">
@@ -922,14 +937,14 @@ function todoParentName(t) {
 function todoRowHTML(t) {
   const badge = dateBadge(t.due_date);
   const zu = todoParentName(t);
-  const metaParts = [t.due_date ? `${fmtDate(new Date(t.due_date + "T00:00:00"))} · ${badge[1]}` : "ohne Termin"];
-  if (zu) metaParts.push(zu);
+  const metaParts = [esc(t.due_date ? `${fmtDate(new Date(t.due_date + "T00:00:00"))} · ${badge[1]}` : "ohne Termin")];
+  if (zu) metaParts.push(esc(zu));
   return `
   <div class="todo-row ${t.completed ? "done" : ""}" data-id="${t.id}">
     <button class="todo-check ${t.completed ? "checked" : ""}" aria-label="Erledigt"></button>
     <div class="todo-body">
-      <div class="todo-title">${esc(t.title)}</div>
-      <div class="todo-meta ${t.completed ? "" : badge[0]}">${esc(metaParts.join(" · "))}</div>
+      <div class="todo-title">${tagTextHTML(t.title)}</div>
+      <div class="todo-meta ${t.completed ? "" : badge[0]}">${metaParts.join(" · ")}</div>
     </div>
   </div>`;
 }
@@ -1067,14 +1082,7 @@ $("todo-delete-btn").addEventListener("click", () => deleteTodo(editingTodoId));
 $("todo-overlay").addEventListener("click", (e) => { if (e.target.id === "todo-overlay") closeTodoModal(); });
 
 /* ================= NOTIZEN ================= */
-// #wort im Text wird zum Tag – keine eigene Tag-Eingabe, wird aus dem Inhalt gelesen.
-function extractTags(content) {
-  const matches = content.match(/#([\p{L}\p{N}_]+)/gu) || [];
-  return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
-}
-function noteContentHTML(content) {
-  return esc(content).replace(/#([\p{L}\p{N}_]+)/gu, '<span class="tag-inline">#$1</span>');
-}
+// Tag-Erkennung (extractTags/tagTextHTML) liegt bei den Helpers – sie gilt app-weit.
 
 function renderNoteTagFilter() {
   const row = $("note-tag-filter");
@@ -1097,7 +1105,7 @@ function renderNoteTagFilter() {
 function noteCardHTML(n) {
   return `
   <div class="note-card" data-id="${n.id}">
-    <div class="note-content">${noteContentHTML(n.content)}</div>
+    <div class="note-content">${tagTextHTML(n.content)}</div>
     <div class="note-meta">${fmtDateTime(new Date(n.created_at))}</div>
   </div>`;
 }
@@ -1252,7 +1260,7 @@ function projectCardHTML(p) {
       <span class="status-chip ${PROJECT_STATUS_CLASS[p.status] || "st-offen"}">${esc(p.status)}</span>
     </div>
     <div class="project-meta">${esc(metaParts.join(" · "))}</div>
-    ${p.note ? `<div class="project-note">${esc(p.note)}</div>` : ""}
+    ${p.note ? `<div class="project-note">${tagTextHTML(p.note)}</div>` : ""}
     ${p.link ? `<a class="project-link" href="${esc(p.link)}" target="_blank" rel="noopener">🔗 ${esc(linkText)}</a>` : ""}
   </div>`;
 }
@@ -1353,6 +1361,87 @@ $("project-save-btn").addEventListener("click", saveProjectModal);
 $("project-cancel-btn").addEventListener("click", closeProjectModal);
 $("project-delete-btn").addEventListener("click", () => deleteProject(editingProjectId));
 $("project-overlay").addEventListener("click", (e) => { if (e.target.id === "project-overlay") closeProjectModal(); });
+
+/* ================= TAG-ANSICHT ================= */
+// Ein Tipp auf ein #tag – egal wo – zeigt alles, was es trägt: Projekte,
+// To-Dos, Abos, Notizen. Das ist die Querverbindung zwischen den Bausteinen.
+
+function closeTagView() { $("tag-overlay").classList.remove("open"); }
+
+// Aus der Sammelansicht heraus direkt ins jeweilige Bearbeiten-Fenster
+function openTagRow(art, id) {
+  closeTagView();
+  if (art === "projekt") openProjectModal(id);
+  else if (art === "abo") openModal(id);
+  else if (art === "todo") openTodoModal(id);
+  else if (art === "note") openNoteModal(id);
+}
+
+function tagRowHTML(art, id, symbol, titelHTML, rechts) {
+  return `
+  <div class="tag-row" data-art="${art}" data-id="${id}">
+    <div class="tag-row-symbol">${symbol}</div>
+    <div class="tag-row-body">${titelHTML}</div>
+    ${rechts ? `<div class="tag-row-rechts">${rechts}</div>` : ""}
+  </div>`;
+}
+
+function openTagView(tag) {
+  $("tag-view-title").textContent = "#" + tag;
+  const secs = [];
+
+  const projekte = projects.filter((p) => extractTags(p.note).includes(tag));
+  if (projekte.length) {
+    secs.push(`<div class="tag-sec-head">Projekte</div>` + projekte.map((p) =>
+      tagRowHTML("projekt", p.id, "📁", esc(p.name),
+        `<span class="status-chip ${PROJECT_STATUS_CLASS[p.status] || "st-offen"}">${esc(p.status)}</span>`)
+    ).join(""));
+  }
+
+  const offen = todos.filter((t) => !t.completed && todoTags(t).includes(tag));
+  const erledigt = todos.filter((t) => t.completed && todoTags(t).includes(tag)).length;
+  if (offen.length || erledigt) {
+    secs.push(`<div class="tag-sec-head">To-Dos</div>` +
+      offen.map((t) => tagRowHTML("todo", t.id, "☐", esc(t.title),
+        t.due_date ? `<span class="next ${dateBadge(t.due_date)[0]}">${dateBadge(t.due_date)[1]}</span>` : "")).join("") +
+      (erledigt ? `<div class="tag-sec-hint">${erledigt === 1 ? "1 erledigtes To-Do" : erledigt + " erledigte To-Dos"}</div>` : ""));
+  }
+
+  const abos = subs.filter((s) => extractTags(s.note).includes(tag));
+  if (abos.length) {
+    secs.push(`<div class="tag-sec-head">Abos</div>` + abos.map((s) =>
+      tagRowHTML("abo", s.id, "💳", esc(s.name) + (s.archived ? ` <span class="tag-dim">(archiviert)</span>` : ""),
+        esc(`${fmt(ownShareMonthly(s))}/M`))
+    ).join(""));
+  }
+
+  const notizen = notes.filter((n) => extractTags(n.content).includes(tag));
+  if (notizen.length) {
+    secs.push(`<div class="tag-sec-head">Notizen</div>` + notizen.map((n) => {
+      const zeile = n.content.split("\n")[0].slice(0, 60);
+      return tagRowHTML("note", n.id, "📝", esc(zeile), esc(kurzDatum(new Date(n.created_at))));
+    }).join(""));
+  }
+
+  const body = $("tag-view-body");
+  body.innerHTML = secs.join("") || `<div class="empty">Nichts weiter mit diesem Tag.</div>`;
+  body.querySelectorAll(".tag-row").forEach((el) =>
+    el.addEventListener("click", () => openTagRow(el.dataset.art, el.dataset.id)));
+  $("tag-overlay").classList.add("open");
+}
+
+$("tag-close-btn").addEventListener("click", closeTagView);
+$("tag-overlay").addEventListener("click", (e) => { if (e.target.id === "tag-overlay") closeTagView(); });
+
+// Ein Klick-Fänger für alle Tags, in der Capture-Phase: er greift, BEVOR die
+// Karte darunter ihr Bearbeiten-Fenster öffnet.
+document.addEventListener("click", (e) => {
+  const el = e.target.closest?.(".tag-inline");
+  if (!el || !el.dataset.tag) return;
+  e.preventDefault();
+  e.stopPropagation();
+  openTagView(el.dataset.tag);
+}, true);
 
 /* ================= EINSTELLUNGEN ================= */
 function bindSettingsUI() {
