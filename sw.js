@@ -1,5 +1,5 @@
 /* Saray OS Service Worker – Offline-Cache + Benachrichtigungen */
-const CACHE = "sarayos-v1";
+const CACHE = "sarayos-v2";
 const ASSETS = [
   "./",
   "./index.html",

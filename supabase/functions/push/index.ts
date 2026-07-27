@@ -126,13 +126,27 @@ async function taeglicherRundlauf() {
     const vorlauf = p.lead_days ?? 3;
     const { data: faellig } = await admin
       .from("subscriptions")
-      .select("name, price, next_payment")
+      .select("name, price, vat_percent, next_payment")
       .eq("user_id", p.user_id)
       .eq("archived", false)
       .gte("next_payment", tag)
       .lte("next_payment", plusTage(tag, vorlauf))
       .order("next_payment");
-    if (!faellig?.length) continue;
+
+    // Offene To-Dos bis Ende des Vorlaufs. Keine Untergrenze: Überfälliges
+    // bleibt in der Erinnerung, bis es abgehakt ist.
+    const { data: aufgaben } = await admin
+      .from("todos")
+      .select("title, due_date")
+      .eq("user_id", p.user_id)
+      .eq("completed", false)
+      .not("due_date", "is", null)
+      .lte("due_date", plusTage(tag, vorlauf))
+      .order("due_date");
+
+    const abos = faellig ?? [];
+    const offen = aufgaben ?? [];
+    if (!abos.length && !offen.length) continue;
 
     const { data: geraete } = await admin
       .from("push_subscriptions")
@@ -140,12 +154,23 @@ async function taeglicherRundlauf() {
       .eq("user_id", p.user_id);
     if (!geraete?.length) continue;
 
-    const titel = faellig.length === 1
-      ? "1 Zahlung steht an"
-      : `${faellig.length} Zahlungen stehen an`;
-    const text = faellig
-      .map((s) => `${s.name}: ${alsEuro(s.price)} am ${alsDeutschesDatum(s.next_payment)}`)
-      .join("\n");
+    const teile: string[] = [];
+    if (abos.length) teile.push(abos.length === 1 ? "1 Zahlung" : `${abos.length} Zahlungen`);
+    if (offen.length) teile.push(offen.length === 1 ? "1 To-Do" : `${offen.length} To-Dos`);
+    const titel = teile.join(" · ");
+
+    // Preis wie in der App: bei gesetztem MwSt-Satz gilt der Betrag als netto
+    const brutto = (s: { price: unknown; vat_percent: unknown }) =>
+      Number(s.price) * (1 + (Number(s.vat_percent) || 0) / 100);
+    const text = [
+      ...abos.map((s) => `${s.name}: ${alsEuro(brutto(s))} am ${alsDeutschesDatum(s.next_payment)}`),
+      ...offen.map((t) => {
+        const wann = t.due_date < tag ? "überfällig"
+          : t.due_date === tag ? "heute"
+          : `am ${alsDeutschesDatum(t.due_date)}`;
+        return `☐ ${t.title} (${wann})`;
+      }),
+    ].join("\n");
 
     for (const g of geraete) {
       // Pro Geraet hoechstens eine Erinnerung am Tag

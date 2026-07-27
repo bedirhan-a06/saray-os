@@ -366,6 +366,33 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .price-history { margin-top: 9px; font-size: 12px; color: var(--text-dim); }
 .price-history div { padding: 2px 0; }
 
+/* ---------- Agenda (Übersicht) ---------- */
+.agenda { display: flex; flex-direction: column; gap: 9px; }
+.agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 10px 13px;
+  cursor: pointer;
+}
+/* Kompaktere Kachel als auf den Abo-Karten – die Zeile soll schlank bleiben */
+.agenda-row .icon { width: 34px; height: 34px; border-radius: 11px; font-size: 17px; }
+.agenda-row .icon.brand svg { width: 18px; height: 18px; }
+.agenda-row .icon.mark { font-size: 11px; }
+.agenda-body { flex: 1; min-width: 0; }
+.agenda-title { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agenda-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.agenda-row .next {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
 /* ---------- Notizen ---------- */
 .note-quickadd { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 .note-quickadd textarea { resize: none; min-height: 44px; max-height: 200px; overflow-y: auto; }

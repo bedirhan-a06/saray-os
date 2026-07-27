@@ -371,7 +371,7 @@ function renderAll() {
   renderBudget();
   renderOverdue();
   renderSavingsHint();
-  renderDueBanner();
+  renderAgenda();
   renderCatFilter();
   renderCards();
   renderArchive();
@@ -386,7 +386,7 @@ function renderSummary() {
   const monthly = act.reduce((sum, s) => sum + ownShareMonthly(s), 0);
   $("monthly-total").textContent = fmt(monthly);
   $("yearly-total").textContent = fmt(monthly * 12);
-  $("sub-count").textContent = act.length;
+  $("open-todo-count").textContent = todos.filter((t) => !t.completed).length;
 }
 
 function renderBudget() {
@@ -509,12 +509,86 @@ function dueSubs() {
   });
 }
 
-function renderDueBanner() {
-  const banner = $("due-banner");
-  const due = dueSubs();
-  if (!due.length) { banner.classList.add("hidden"); return; }
-  banner.classList.remove("hidden");
-  banner.innerHTML = `🔔 <span>Bald fällig: <strong>${esc(due.map((s) => `${s.name} (${fmtDate(new Date(s.next_payment + "T00:00:00"))})`).join(", "))}</strong></span>`;
+/* ---- Agenda: was ansteht, egal welcher Art ---- */
+// Fester 7-Tage-Blick, unabhängig von der Erinnerungs-Vorlaufzeit: die steuert
+// nur, wann benachrichtigt wird – die Übersicht soll immer die Woche zeigen.
+const AGENDA_TAGE = 7;
+
+function kurzDatum(d) {
+  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+}
+
+function agendaItems() {
+  const heute = todayMidnight();
+  const grenze = new Date(heute);
+  grenze.setDate(grenze.getDate() + AGENDA_TAGE);
+  const items = [];
+  activeSubs().forEach((s) => {
+    const d = new Date(s.next_payment + "T00:00:00");
+    // Überfällige Abos stehen schon oben im roten Panel mit Bezahlt/Gekündigt
+    if (d >= heute && d <= grenze) items.push({ art: "abo", datum: d, s });
+  });
+  todos.forEach((t) => {
+    if (t.completed || !t.due_date) return;
+    const d = new Date(t.due_date + "T00:00:00");
+    // Überfällige To-Dos bleiben stehen, bis sie erledigt sind
+    if (d <= grenze) items.push({ art: "todo", datum: d, t });
+  });
+  return items.sort((a, b) => a.datum - b.datum);
+}
+
+function agendaChip(dateStr, datum) {
+  const badge = dateBadge(dateStr);
+  const text = ["heute", "morgen", "überfällig"].includes(badge[1])
+    ? badge[1]
+    : `${kurzDatum(datum)} · ${badge[1]}`;
+  // Feinere Ampel als auf den Karten: im 7-Tage-Fenster wäre sonst alles rot
+  // und die Farbe hätte keine Aussage mehr.
+  const diff = Math.round((datum - todayMidnight()) / 864e5);
+  const ton = diff <= 1 ? "soon" : diff <= 3 ? "mid" : "far";
+  return `<div class="next ${ton}">${text}</div>`;
+}
+
+function renderAgenda() {
+  const box = $("agenda-container");
+  if (!box) return;
+  const items = agendaItems();
+  if (!items.length) {
+    box.innerHTML = `<div class="empty">In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig. 🎉</div>`;
+    return;
+  }
+  box.innerHTML = items.map((it) => {
+    if (it.art === "abo") {
+      return `
+      <div class="agenda-row" data-art="abo" data-id="${it.s.id}">
+        ${iconHTML(it.s)}
+        <div class="agenda-body">
+          <div class="agenda-title">${esc(it.s.name)}</div>
+          <div class="agenda-meta">Abo · ${fmt(bruttoPreis(it.s))}</div>
+        </div>
+        ${agendaChip(it.s.next_payment, it.datum)}
+      </div>`;
+    }
+    const sub = it.t.subscription_id ? subs.find((s) => s.id === it.t.subscription_id) : null;
+    return `
+    <div class="agenda-row" data-art="todo" data-id="${it.t.id}">
+      <button class="todo-check" aria-label="Erledigt"></button>
+      <div class="agenda-body">
+        <div class="agenda-title">${esc(it.t.title)}</div>
+        <div class="agenda-meta">To-Do${sub ? " · " + esc(sub.name) : ""}</div>
+      </div>
+      ${agendaChip(it.t.due_date, it.datum)}
+    </div>`;
+  }).join("");
+  box.querySelectorAll(".agenda-row").forEach((el) => {
+    const id = el.dataset.id;
+    if (el.dataset.art === "todo") {
+      el.querySelector(".todo-check").addEventListener("click", (e) => { e.stopPropagation(); toggleTodo(id); });
+      el.querySelector(".agenda-body").addEventListener("click", () => openTodoModal(id));
+    } else {
+      el.addEventListener("click", () => openModal(id));
+    }
+  });
 }
 
 function renderCatFilter() {
@@ -586,9 +660,9 @@ function renderCards() {
 function renderArchive() {
   const container = $("archive-container");
   const list = subs.filter((s) => s.archived);
-  container.innerHTML = list.length
-    ? list.map((s) => cardHTML(s, true)).join("")
-    : `<div class="empty">Keine archivierten Abos.</div>`;
+  // Kein eigener Tab mehr: sitzt unten im Abos-Tab und taucht nur auf, wenn es was gibt
+  $("archive-head").classList.toggle("hidden", !list.length);
+  container.innerHTML = list.map((s) => cardHTML(s, true)).join("");
   container.querySelectorAll(".card").forEach((el) => {
     const id = el.dataset.id;
     el.querySelector(".unarchive")?.addEventListener("click", () => setArchived(id, false));
@@ -862,7 +936,7 @@ async function quickAddTodo() {
     titleEl.value = "";
     dateEl.value = "";
     await loadTodos();
-    renderTodos();
+    renderAll();
   } catch (err) {
     console.error(err);
     showToast("Fehler beim Speichern");
@@ -880,9 +954,9 @@ async function toggleTodo(id) {
   const completed = !t.completed;
   const patch = { completed, completed_at: completed ? new Date().toISOString() : null, updated_at: new Date().toISOString() };
   Object.assign(t, patch);   // optimistisch: sofort umschalten, nicht auf den Server warten
-  renderTodos();
+  renderAll();
   const { error } = await db.from("todos").update(patch).eq("id", id);
-  if (error) { showToast("Fehler beim Speichern"); console.error(error); await loadTodos(); renderTodos(); }
+  if (error) { showToast("Fehler beim Speichern"); console.error(error); await loadTodos(); renderAll(); }
 }
 
 async function deleteTodo(id) {
@@ -894,7 +968,7 @@ async function deleteTodo(id) {
   closeTodoModal();
   showToast("Gelöscht");
   await loadTodos();
-  renderTodos();
+  renderAll();
 }
 
 function openTodoModal(id) {
@@ -930,7 +1004,7 @@ async function saveTodoModal() {
     closeTodoModal();
     showToast("Gespeichert");
     await loadTodos();
-    renderTodos();
+    renderAll();
   } catch (err) {
     console.error(err);
     showToast("Fehler beim Speichern");
@@ -1081,8 +1155,8 @@ function bindSettingsUI() {
   $("set-currency").value = profile.currency || "EUR";
   $("set-budget").value = profile.monthly_budget ?? "";
 
-  $("set-reminders").onchange = (e) => { saveProfile({ reminders_enabled: e.target.checked }); renderDueBanner(); };
-  $("set-leaddays").onchange = (e) => { saveProfile({ lead_days: parseInt(e.target.value, 10) }); renderDueBanner(); };
+  $("set-reminders").onchange = (e) => saveProfile({ reminders_enabled: e.target.checked });
+  $("set-leaddays").onchange = (e) => saveProfile({ lead_days: parseInt(e.target.value, 10) });
   $("set-sort").onchange = (e) => { saveProfile({ sort_by: e.target.value }); renderCards(); };
   $("set-currency").onchange = (e) => { saveProfile({ currency: e.target.value }); renderAll(); };
   $("set-budget").onchange = (e) => {
@@ -1119,8 +1193,9 @@ document.querySelectorAll(".tabbar button").forEach((btn) => {
   btn.addEventListener("click", () => {
     activeTab = btn.dataset.tab;
     document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("active", b === btn));
-    ["home", "todos", "notes", "stats", "archive", "settings"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== activeTab));
-    $("add-btn").classList.toggle("hidden", activeTab !== "home");
+    ["home", "abos", "todos", "notes", "stats", "settings"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== activeTab));
+    // Der +-Knopf legt Abos an – To-Dos und Notizen haben ihre eigene Schnelleingabe
+    $("add-btn").classList.toggle("hidden", activeTab !== "abos");
     if (activeTab === "stats") renderStats();
   });
 });
@@ -1283,9 +1358,19 @@ async function requestPush() {
 }
 $("notif-btn").addEventListener("click", requestPush);
 
+// To-Dos im Erinnerungsfenster: fällig innerhalb der Vorlaufzeit – Überfälliges
+// bleibt drin, bis es abgehakt ist (anders als Abos, die das rote Panel klärt).
+function dueTodos() {
+  if (!profile?.reminders_enabled) return [];
+  const grenze = new Date(todayMidnight());
+  grenze.setDate(grenze.getDate() + (profile.lead_days ?? 3));
+  return todos.filter((t) => !t.completed && t.due_date && new Date(t.due_date + "T00:00:00") <= grenze);
+}
+
 async function maybeNotifyDue(force) {
-  const due = dueSubs();
-  if (!due.length) { if (force) showToast("Aktuell nichts fällig 🎉"); return; }
+  const abos = dueSubs();
+  const aufgaben = dueTodos();
+  if (!abos.length && !aufgaben.length) { if (force) showToast("Aktuell nichts fällig 🎉"); return; }
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   // pro Tag nur einmal benachrichtigen – localStorage, sonst gilt das nur pro Browser-Sitzung
   const key = "sarayos-notified-" + todayMidnight().toISOString().slice(0, 10);
@@ -1293,10 +1378,16 @@ async function maybeNotifyDue(force) {
     if (!force && localStorage.getItem(key) === "1") return;
     localStorage.setItem(key, "1");
   } catch (_) { /* Privatmodus o. Ä. – dann eben ohne Merker */ }
+  const teile = [];
+  if (abos.length) teile.push(abos.length === 1 ? "1 Zahlung" : `${abos.length} Zahlungen`);
+  if (aufgaben.length) teile.push(aufgaben.length === 1 ? "1 To-Do" : `${aufgaben.length} To-Dos`);
   try {
     const reg = await navigator.serviceWorker.ready;
-    reg.showNotification("Saray OS – Zahlung steht an", {
-      body: due.map((s) => `${customIcon(s) || "•"} ${s.name}: ${fmt(bruttoPreis(s))} am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}`).join("\n"),
+    reg.showNotification(`Saray OS – ${teile.join(" · ")}`, {
+      body: [
+        ...abos.map((s) => `${customIcon(s) || "💳"} ${s.name}: ${fmt(bruttoPreis(s))} am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}`),
+        ...aufgaben.map((t) => `☐ ${t.title} (${dateBadge(t.due_date)[1]})`)
+      ].join("\n"),
       icon: "icons/icon-192.png",
       badge: "icons/icon-192.png"
     });

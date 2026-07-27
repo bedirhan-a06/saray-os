@@ -2,7 +2,9 @@
 
 ## Web Push
 
-Erinnerungen kommen an, auch wenn die App geschlossen ist.
+Erinnerungen kommen an, auch wenn die App geschlossen ist. Der tägliche
+Rundlauf erinnert an fällige Abo-Zahlungen **und** offene To-Dos mit Datum
+(Überfälliges bleibt drin, bis es abgehakt ist).
 
 ### Bestandteile
 
@@ -47,7 +49,7 @@ select status_code, content from net._http_response order by id desc limit 1;
 
 1. Steht ein Gerät in `push_subscriptions`? Sonst in der App auf 🔔 drücken.
    Am iPhone muss die App vorher auf dem Home-Bildschirm liegen (ab iOS 16.4).
-2. Ist `reminders_enabled` im Profil an und liegt ein Abo innerhalb `lead_days`?
+2. Ist `reminders_enabled` im Profil an und liegt ein Abo oder To-Do innerhalb `lead_days`?
 3. Rückgabe von `send` lesen: `entfernt` heißt, das Gerät hat sich abgemeldet –
    die App meldet es beim nächsten Start automatisch neu an.
 4. Logs: Supabase Dashboard → Edge Functions → `push`.

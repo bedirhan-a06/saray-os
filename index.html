@@ -85,9 +85,9 @@
         <div class="sub">hochgerechnet</div>
       </div>
       <div class="stat">
-        <div class="label">Aktive Abos</div>
-        <div class="value" id="sub-count">–</div>
-        <div class="sub">insgesamt</div>
+        <div class="label">To-Dos</div>
+        <div class="value" id="open-todo-count">–</div>
+        <div class="sub">noch offen</div>
       </div>
     </div>
 
@@ -101,15 +101,22 @@
     </div>
 
     <div id="overdue-banner" class="overdue-panel hidden"></div>
-    <div id="due-banner" class="hint-banner hidden"></div>
     <div id="savings-banner" class="hint-banner hidden"></div>
 
+    <div class="section-head"><h2>Nächste 7 Tage</h2></div>
+    <div class="agenda" id="agenda-container"></div>
+  </section>
+
+  <!-- ===== Tab: Abos ===== -->
+  <section id="tab-abos" class="hidden">
     <div class="section-head">
       <h2>Meine Abos</h2>
       <button class="btn subtle" id="ics-btn" title="Zahltermine in Kalender exportieren">📅 Export</button>
     </div>
     <div class="chip-row" id="cat-filter"></div>
     <div class="cards" id="cards-container"></div>
+    <div class="section-head hidden" id="archive-head"><h2>Archiv</h2></div>
+    <div class="cards" id="archive-container"></div>
   </section>
 
   <!-- ===== Tab: To-Dos ===== -->
@@ -149,12 +156,6 @@
     </div>
   </section>
 
-  <!-- ===== Tab: Archiv ===== -->
-  <section id="tab-archive" class="hidden">
-    <div class="section-head"><h2>Archivierte Abos</h2></div>
-    <div class="cards" id="archive-container"></div>
-  </section>
-
   <!-- ===== Tab: Einstellungen ===== -->
   <section id="tab-settings" class="hidden">
     <div class="section-head"><h2>Einstellungen</h2></div>
@@ -164,7 +165,7 @@
       <div class="setting-row">
         <div>
           Erinnerungen
-          <div class="desc">Beim Öffnen der App an fällige Abos erinnern</div>
+          <div class="desc">An fällige Abos und To-Dos erinnern</div>
         </div>
         <label class="switch"><input type="checkbox" id="set-reminders"><span class="slider"></span></label>
       </div>
@@ -252,10 +253,10 @@
 
   <nav class="tabbar">
     <button data-tab="home" class="active"><span class="ti">🏠</span>Übersicht</button>
+    <button data-tab="abos"><span class="ti">💳</span>Abos</button>
     <button data-tab="todos"><span class="ti">✅</span>To-Dos</button>
     <button data-tab="notes"><span class="ti">📝</span>Notizen</button>
     <button data-tab="stats"><span class="ti">📊</span>Statistik</button>
-    <button data-tab="archive"><span class="ti">🗄️</span>Archiv</button>
     <button data-tab="settings"><span class="ti">⚙️</span>Einstellungen</button>
   </nav>
 </div>
