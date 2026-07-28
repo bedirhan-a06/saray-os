@@ -269,6 +269,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   text-transform: uppercase;
   letter-spacing: 0.07em;
 }
+/* Datum rechts in der Abschnittszeile – gleiche Höhe, aber ohne Versalien */
+.head-date { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
 .chip-row { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; scrollbar-width: none; }
 .chip-row::-webkit-scrollbar { display: none; }
 .chip {

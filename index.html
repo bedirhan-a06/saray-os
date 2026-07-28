@@ -155,13 +155,13 @@
         <span class="amount" id="budget-amount"></span>
       </div>
       <div class="budget-track"><div class="budget-fill" id="budget-fill"></div></div>
-      <div class="budget-hint hidden" id="budget-hint">Budget überschritten!</div>
+      <div class="budget-hint hidden" id="budget-hint">Budget überschritten</div>
     </div>
 
     <div id="overdue-banner" class="overdue-panel hidden"></div>
     <div id="savings-banner" class="hint-banner hidden"></div>
 
-    <div class="section-head"><h2>Nächste 7 Tage</h2></div>
+    <div class="section-head"><h2>Nächste 7 Tage</h2><span class="head-date" id="agenda-date"></span></div>
     <div class="agenda list" id="agenda-container"></div>
   </section>
 
@@ -226,7 +226,7 @@
       <div class="setting-row">
         <div>
           Erinnerungen
-          <div class="desc">An fällige Abos und To-Dos erinnern</div>
+          <div class="desc">An fällige Abos, To-Dos und Deadlines erinnern</div>
         </div>
         <label class="switch"><input type="checkbox" id="set-reminders"><span class="slider"></span></label>
       </div>
@@ -244,7 +244,7 @@
       </div>
       <div class="setting-row">
         <div>
-          Push-Benachrichtigungen
+          Mitteilungen
           <div class="desc">Auch bei geschlossener App. Am iPhone erst zum Home-Bildschirm hinzufügen.</div>
         </div>
         <button class="btn" id="set-push">Aktivieren</button>
@@ -260,6 +260,13 @@
 
     <div class="settings-group">
       <h3>Darstellung</h3>
+      <div class="setting-row">
+        <div>
+          Anzeigename
+          <div class="desc">Steht oben in der Begrüßung</div>
+        </div>
+        <input type="text" id="set-name" maxlength="24" placeholder="Bedo">
+      </div>
       <div class="setting-row">
         <div>Sortierung</div>
         <select id="set-sort">
@@ -305,7 +312,7 @@
       </div>
       <div class="setting-row">
         <div>Abmelden</div>
-        <button class="btn danger" id="logout-btn">Logout</button>
+        <button class="btn danger" id="logout-btn">Abmelden</button>
       </div>
     </div>
   </section>
@@ -328,7 +335,7 @@
   <div class="modal">
     <h2 id="modal-title">Abo hinzufügen</h2>
     <div class="row2 icon-row">
-      <div class="icon-preview" id="f-preview" title="So sieht das Abo in der Übersicht aus"></div>
+      <div class="icon-preview" id="f-preview" title="So sieht das Abo in der Liste aus"></div>
       <div class="field">
         <label>Name</label>
         <input type="text" id="f-name" placeholder="z. B. Netflix">

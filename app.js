@@ -57,6 +57,10 @@ function fmtDate(d) {
 function fmtDateTime(d) {
   return `${fmtDate(d)} · ${d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`;
 }
+// Ausgeschrieben für den Kopfbereich: „Montag, 27. Juli"
+function fmtDatumLang(d) {
+  return d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
+}
 function todayMidnight() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
 // Lokales Datum als YYYY-MM-DD. Nicht über toISOString – das rechnet in UTC um
 // und macht aus lokaler Mitternacht den Vortag.
@@ -220,9 +224,9 @@ async function doAuth() {
       // Bei bereits registrierter E-Mail meldet Supabase absichtlich Erfolg (Schutz vor
       // dem Abklappern fremder Adressen) und verschickt nichts – erkennbar an leerem identities.
       else if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        $("auth-error").textContent = "Diese E-Mail ist bereits registriert. Melde dich an – oder setze dein Passwort zurück.";
+        $("auth-error").textContent = "Diese E-Mail ist bereits registriert. Melde dich an oder setz dein Passwort zurück.";
       }
-      else $("auth-error").textContent = "Fast geschafft! Bitte bestätige deine E-Mail über den Link in deinem Postfach und melde dich dann an.";
+      else $("auth-error").textContent = "Konto angelegt. Bestätige die E-Mail über den Link in deinem Postfach und melde dich dann an.";
     } else {
       const { data, error } = await db.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -326,7 +330,6 @@ $("mail-new").addEventListener("keydown", (e) => { if (e.key === "Enter") saveMa
 async function enterApp() {
   $("auth-view").classList.add("hidden");
   $("app-view").classList.remove("hidden");
-  $("today-label").textContent = "Stand: " + fmtDate(todayMidnight());
   $("acct-email").textContent = user.email;
   await loadProfile();
   await loadSubs();
@@ -402,6 +405,7 @@ async function saveProfile(patch) {
 function activeSubs() { return subs.filter((s) => !s.archived); }
 
 function renderAll() {
+  renderBegruessung();
   renderSummary();
   renderBudget();
   renderOverdue();
@@ -417,6 +421,30 @@ function renderAll() {
   renderProjects();
   // Statistik lebt jetzt im Abos-Tab
   if (activeTab === "abos") renderStats();
+}
+
+// Kopfzeile: Begrüßung nach Tageszeit statt „Stand: 27.07.2026".
+// Bewusst nur Grußformeln – nichts, was den Zustand des Nutzers kommentiert
+// („Noch wach?"). Die App begrüßt, sie beobachtet nicht.
+// Zwischen 23 und 5 Uhr hat das Deutsche keine eigene Formel, dort steht „Hallo".
+const GRUSS = { morgen: "Guten Morgen", tag: "Hallo", abend: "Guten Abend", nacht: "Hallo" };
+
+// Die Grenzen sind auf Bedos Tag gelegt – er arbeitet regelmäßig bis nach
+// Mitternacht, deshalb reicht der Abend bis 23 Uhr und die Nacht bis 5 Uhr.
+function tageszeit(stunde) {
+  if (stunde < 5) return "nacht";
+  if (stunde < 11) return "morgen";
+  if (stunde < 18) return "tag";
+  if (stunde < 23) return "abend";
+  return "nacht";
+}
+
+function renderBegruessung() {
+  const jetzt = new Date();
+  const name = (profile?.display_name || "").trim();
+  const gruss = GRUSS[tageszeit(jetzt.getHours())];
+  $("today-label").textContent = name ? `${gruss}, ${name}` : gruss;
+  $("agenda-date").textContent = fmtDatumLang(jetzt);
 }
 
 function renderSummary() {
@@ -471,8 +499,8 @@ function renderSavingsHint() {
   const top = lang[0];
   const weitere = lang.length - 1;
   banner.innerHTML =
-    `💡 <span>Sparpotential? <strong>${esc(top.s.name)}</strong> läuft seit ${top.monate} Monaten – ` +
-    `das waren bisher rund <strong>${fmt(top.gezahlt)}</strong>. Brauchst du das noch?` +
+    `<span><strong>${esc(top.s.name)}</strong> läuft seit ${top.monate} Monaten – ` +
+    `bisher rund <strong>${fmt(top.gezahlt)}</strong>.` +
     (weitere > 0
       ? weitere === 1
         ? " (ein weiteres Abo läuft ähnlich lang)"
@@ -505,7 +533,7 @@ function renderOverdue() {
   if (!list.length) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
   box.innerHTML =
-    `<div class="ov-head">⏰ ${list.length === 1 ? "Ein Zahltermin ist durch" : list.length + " Zahltermine sind durch"}</div>` +
+    `<div class="ov-head">${list.length === 1 ? "Ein Zahltermin ist überfällig" : list.length + " Zahltermine sind überfällig"}</div>` +
     list.map((s) => `
       <div class="ov-row" data-id="${s.id}">
         <div class="ov-info">
@@ -598,7 +626,7 @@ function renderAgenda() {
   if (!box) return;
   const items = agendaItems();
   if (!items.length) {
-    box.innerHTML = `<div class="empty">In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig. 🎉</div>`;
+    box.innerHTML = `<div class="empty">In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig.</div>`;
     return;
   }
   box.innerHTML = items.map((it) => {
@@ -706,7 +734,7 @@ function renderCards() {
   if (activeCat !== "Alle") list = list.filter((s) => s.category === activeCat);
   container.innerHTML = list.length
     ? list.map((s) => cardHTML(s, false)).join("")
-    : `<div class="empty">Noch keine Abos${activeCat !== "Alle" ? " in dieser Kategorie" : ""}. Tippe unten rechts auf „+“.</div>`;
+    : `<div class="empty">Noch keine Abos${activeCat !== "Alle" ? " in dieser Kategorie" : ""} – tipp unten rechts auf „+“.</div>`;
   container.querySelectorAll(".card").forEach((el) => {
     const id = el.dataset.id;
     el.querySelector(".edit")?.addEventListener("click", () => openModal(id));
@@ -836,7 +864,7 @@ function openModal(id) {
 }
 function closeModal() { $("overlay").classList.remove("open"); editingId = null; }
 
-/* Zeigt live, wie das Abo in der Übersicht aussehen wird */
+/* Zeigt live, wie das Abo in der Liste aussehen wird */
 function refreshPreview() {
   $("f-preview").innerHTML = iconHTML({
     icon: $("f-icon").value,
@@ -920,7 +948,7 @@ $("submit-btn").addEventListener("click", async () => {
 
 async function setArchived(id, archived) {
   const { error } = await db.from("subscriptions").update({ archived, updated_at: new Date().toISOString() }).eq("id", id);
-  if (error) { showToast("Fehler"); return; }
+  if (error) { showToast(archived ? "Fehler beim Archivieren" : "Fehler beim Reaktivieren"); return; }
   showToast(archived ? "Archiviert" : "Reaktiviert");
   await loadSubs();
   renderAll();
@@ -981,7 +1009,7 @@ function renderTodos() {
   const sorted = sortTodos(visible);
   container.innerHTML = sorted.length
     ? sorted.map(todoRowHTML).join("")
-    : `<div class="empty">Noch keine To-Dos. Trag oben etwas ein.</div>`;
+    : `<div class="empty">Noch keine To-Dos – trag oben etwas ein.</div>`;
   container.querySelectorAll(".todo-row").forEach((el) => {
     const id = el.dataset.id;
     el.querySelector(".todo-check").addEventListener("click", (e) => { e.stopPropagation(); toggleTodo(id); });
@@ -1131,7 +1159,7 @@ function renderNotes() {
   if (activeNoteTag !== "Alle") list = list.filter((n) => extractTags(n.content).includes(activeNoteTag));
   container.innerHTML = list.length
     ? list.map(noteCardHTML).join("")
-    : `<div class="empty">${activeNoteTag !== "Alle" ? "Keine Notizen mit diesem Tag." : "Noch keine Notizen. Trag oben etwas ein."}</div>`;
+    : `<div class="empty">${activeNoteTag !== "Alle" ? "Keine Notizen mit diesem Tag." : "Noch keine Notizen – trag oben etwas ein."}</div>`;
   container.querySelectorAll(".note-card").forEach((el) => {
     el.addEventListener("click", () => openNoteModal(el.dataset.id));
   });
@@ -1286,7 +1314,7 @@ function renderProjects() {
   if (activeProjectKind !== "Alle") list = list.filter((p) => p.kind === activeProjectKind);
   container.innerHTML = list.length
     ? list.map(projectCardHTML).join("")
-    : `<div class="empty">Noch keine Projekte${activeProjectKind !== "Alle" ? " dieser Art" : ""}. Tippe unten rechts auf „+“.</div>`;
+    : `<div class="empty">Noch keine Projekte${activeProjectKind !== "Alle" ? " dieser Art" : ""} – tipp unten rechts auf „+“.</div>`;
   container.querySelectorAll(".project-card").forEach((el) => {
     el.addEventListener("click", () => openProjectModal(el.dataset.id));
     // Der Link soll die Seite öffnen, nicht das Modal
@@ -1459,12 +1487,20 @@ document.addEventListener("click", (e) => {
 
 /* ================= EINSTELLUNGEN ================= */
 function bindSettingsUI() {
+  $("set-name").value = profile.display_name || "";
   $("set-reminders").checked = !!profile.reminders_enabled;
   $("set-leaddays").value = String(profile.lead_days ?? 3);
   $("set-sort").value = profile.sort_by || "next_payment";
   $("set-currency").value = profile.currency || "EUR";
   $("set-budget").value = profile.monthly_budget ?? "";
 
+  // Leeres Feld = kein Name; dann grüßt die App eben ohne Anrede
+  $("set-name").onchange = (e) => {
+    const name = e.target.value.trim();
+    e.target.value = name;
+    saveProfile({ display_name: name || null });
+    renderBegruessung();
+  };
   $("set-reminders").onchange = (e) => saveProfile({ reminders_enabled: e.target.checked });
   $("set-leaddays").onchange = (e) => saveProfile({ lead_days: parseInt(e.target.value, 10) });
   $("set-sort").onchange = (e) => { saveProfile({ sort_by: e.target.value }); renderCards(); };
@@ -1569,7 +1605,7 @@ $("ics-btn").addEventListener("click", () => {
       "BEGIN:VALARM",
       `TRIGGER:-P${lead}D`,
       "ACTION:DISPLAY",
-      `DESCRIPTION:${icsEsc(`${s.name} wird in ${lead} Tagen abgebucht`)}`,
+      `DESCRIPTION:${icsEsc(`${s.name} wird ${lead === 1 ? "morgen" : `in ${lead} Tagen`} abgebucht`)}`,
       "END:VALARM",
       "END:VEVENT"
     );
@@ -1703,7 +1739,7 @@ async function maybeNotifyDue(force) {
   const abos = dueSubs();
   const aufgaben = dueTodos();
   const deadlines = dueProjects();
-  if (!abos.length && !aufgaben.length && !deadlines.length) { if (force) showToast("Aktuell nichts fällig 🎉"); return; }
+  if (!abos.length && !aufgaben.length && !deadlines.length) { if (force) showToast("Nichts fällig"); return; }
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   // pro Tag nur einmal benachrichtigen – localStorage, sonst gilt das nur pro Browser-Sitzung
   const key = "sarayos-notified-" + todayMidnight().toISOString().slice(0, 10);
