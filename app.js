@@ -35,6 +35,11 @@ let authMode = "login"; // 'login' | 'register'
 let activeCat = "Alle";
 let activeTab = "home";
 let dismissedSavings = false;
+// Merkt sich das eine To-Do, das gerade angetippt wurde. renderAll() baut die
+// Zeilen neu auf – ohne diese Markierung würde der Häkchen-Impuls bei jedem
+// Neuzeichnen auf allen erledigten To-Dos gleichzeitig losgehen.
+let ebenAbgehakt = null;
+let abhakTimer = null;
 
 /* ---- Helpers ---- */
 const $ = (id) => document.getElementById(id);
@@ -91,6 +96,11 @@ function dateBadge(dateStr) {
 }
 function cycleText(m) { return m === 1 ? "/ Monat" : m === 12 ? "/ Jahr" : `/ ${m} Monate`; }
 function esc(str) { const d = document.createElement("div"); d.textContent = str ?? ""; return d.innerHTML; }
+
+// Icon aus dem Sprite in index.html; nimmt per currentColor die Umgebungsfarbe an
+function svgIcon(name, cls) {
+  return `<svg class="ic${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+}
 
 /* ---- Tags: #wort in beliebigem Text wird zum app-weiten Querverweis ---- */
 // Ein Mechanismus für alles: Notiz-Inhalt, To-Do-Titel, Abo- und Projekt-Notiz.
@@ -325,6 +335,7 @@ async function enterApp() {
   await loadProjects();
   bindSettingsUI();
   renderAll();
+  zeigeTabAn($("tab-" + activeTab));   // beim Start zieht die Übersicht einmal auf
   maybeNotifyDue();
   // Push-Anmeldung bei jedem Start auffrischen – iOS laesst sie still verfallen.
   registerPush().catch((e) => console.warn("Push-Anmeldung:", e));
@@ -467,7 +478,7 @@ function renderSavingsHint() {
         ? " (ein weiteres Abo läuft ähnlich lang)"
         : ` (${weitere} weitere Abos laufen ähnlich lang)`
       : "") +
-    `</span><button id="savings-close">✕</button>`;
+    `</span><button id="savings-close" aria-label="Ausblenden">${svgIcon("x")}</button>`;
   $("savings-close").addEventListener("click", () => { dismissedSavings = true; banner.classList.add("hidden"); });
 }
 
@@ -605,7 +616,7 @@ function renderAgenda() {
     if (it.art === "projekt") {
       return `
       <div class="agenda-row" data-art="projekt" data-id="${it.p.id}">
-        <div class="icon">📁</div>
+        <div class="icon">${svgIcon("folder")}</div>
         <div class="agenda-body">
           <div class="agenda-title">${esc(it.p.name)}</div>
           <div class="agenda-meta">Projekt · ${esc(it.p.status)}</div>
@@ -683,8 +694,8 @@ function cardHTML(s, archivedView) {
     ${others > 0 ? `<div class="share-note">geteilt mit ${others} weiteren ${others === 1 ? "Person" : "Personen"} · gesamt ${fmt(bruttoPreis(s) / s.cycle_months)}/M</div>` : ""}
     <div class="card-actions">
       ${archivedView
-        ? `<button class="unarchive">↩︎ Reaktivieren</button><button class="del">✕ Endgültig löschen</button>`
-        : `<button class="edit">✎ Bearbeiten</button><button class="archive">🗄 Archivieren</button><button class="del">✕ Löschen</button>`}
+        ? `<button class="unarchive">${svgIcon("undo")}Reaktivieren</button><button class="del">${svgIcon("x")}Endgültig löschen</button>`
+        : `<button class="edit">${svgIcon("pen")}Bearbeiten</button><button class="archive">${svgIcon("archive")}Archivieren</button><button class="del">${svgIcon("x")}Löschen</button>`}
     </div>
   </div>`;
 }
@@ -941,7 +952,7 @@ function todoRowHTML(t) {
   if (zu) metaParts.push(esc(zu));
   return `
   <div class="todo-row ${t.completed ? "done" : ""}" data-id="${t.id}">
-    <button class="todo-check ${t.completed ? "checked" : ""}" aria-label="Erledigt"></button>
+    <button class="todo-check ${t.completed ? "checked" : ""}${t.id === ebenAbgehakt ? " just" : ""}" aria-label="Erledigt"></button>
     <div class="todo-body">
       <div class="todo-title">${tagTextHTML(t.title)}</div>
       <div class="todo-meta ${t.completed ? "" : badge[0]}">${metaParts.join(" · ")}</div>
@@ -1008,6 +1019,9 @@ async function toggleTodo(id) {
   const completed = !t.completed;
   const patch = { completed, completed_at: completed ? new Date().toISOString() : null, updated_at: new Date().toISOString() };
   Object.assign(t, patch);   // optimistisch: sofort umschalten, nicht auf den Server warten
+  ebenAbgehakt = completed ? id : null;
+  clearTimeout(abhakTimer);
+  abhakTimer = setTimeout(() => { ebenAbgehakt = null; }, 600);
   renderAll();
   const { error } = await db.from("todos").update(patch).eq("id", id);
   if (error) { showToast("Fehler beim Speichern"); console.error(error); await loadTodos(); renderAll(); }
@@ -1261,7 +1275,7 @@ function projectCardHTML(p) {
     </div>
     <div class="project-meta">${esc(metaParts.join(" · "))}</div>
     ${p.note ? `<div class="project-note">${tagTextHTML(p.note)}</div>` : ""}
-    ${p.link ? `<a class="project-link" href="${esc(p.link)}" target="_blank" rel="noopener">🔗 ${esc(linkText)}</a>` : ""}
+    ${p.link ? `<a class="project-link" href="${esc(p.link)}" target="_blank" rel="noopener">${svgIcon("link")}${esc(linkText)}</a>` : ""}
   </div>`;
 }
 
@@ -1393,7 +1407,7 @@ function openTagView(tag) {
   const projekte = projects.filter((p) => extractTags(p.note).includes(tag));
   if (projekte.length) {
     secs.push(`<div class="tag-sec-head">Projekte</div>` + projekte.map((p) =>
-      tagRowHTML("projekt", p.id, "📁", esc(p.name),
+      tagRowHTML("projekt", p.id, svgIcon("folder"), esc(p.name),
         `<span class="status-chip ${PROJECT_STATUS_CLASS[p.status] || "st-offen"}">${esc(p.status)}</span>`)
     ).join(""));
   }
@@ -1402,7 +1416,7 @@ function openTagView(tag) {
   const erledigt = todos.filter((t) => t.completed && todoTags(t).includes(tag)).length;
   if (offen.length || erledigt) {
     secs.push(`<div class="tag-sec-head">To-Dos</div>` +
-      offen.map((t) => tagRowHTML("todo", t.id, "☐", esc(t.title),
+      offen.map((t) => tagRowHTML("todo", t.id, svgIcon("circle"), esc(t.title),
         t.due_date ? `<span class="next ${dateBadge(t.due_date)[0]}">${dateBadge(t.due_date)[1]}</span>` : "")).join("") +
       (erledigt ? `<div class="tag-sec-hint">${erledigt === 1 ? "1 erledigtes To-Do" : erledigt + " erledigte To-Dos"}</div>` : ""));
   }
@@ -1410,7 +1424,7 @@ function openTagView(tag) {
   const abos = subs.filter((s) => extractTags(s.note).includes(tag));
   if (abos.length) {
     secs.push(`<div class="tag-sec-head">Abos</div>` + abos.map((s) =>
-      tagRowHTML("abo", s.id, "💳", esc(s.name) + (s.archived ? ` <span class="tag-dim">(archiviert)</span>` : ""),
+      tagRowHTML("abo", s.id, svgIcon("card"), esc(s.name) + (s.archived ? ` <span class="tag-dim">(archiviert)</span>` : ""),
         esc(`${fmt(ownShareMonthly(s))}/M`))
     ).join(""));
   }
@@ -1419,7 +1433,7 @@ function openTagView(tag) {
   if (notizen.length) {
     secs.push(`<div class="tag-sec-head">Notizen</div>` + notizen.map((n) => {
       const zeile = n.content.split("\n")[0].slice(0, 60);
-      return tagRowHTML("note", n.id, "📝", esc(zeile), esc(kurzDatum(new Date(n.created_at))));
+      return tagRowHTML("note", n.id, svgIcon("note"), esc(zeile), esc(kurzDatum(new Date(n.created_at))));
     }).join(""));
   }
 
@@ -1494,8 +1508,21 @@ document.querySelectorAll(".tabbar button").forEach((btn) => {
     // To-Dos und Notizen haben ihre eigene Schnelleingabe
     $("add-btn").classList.toggle("hidden", activeTab !== "abos" && activeTab !== "projekte");
     if (activeTab === "abos") renderStats();
+    zeigeTabAn($("tab-" + activeTab));
   });
 });
+
+// Der neue Tab blendet einmal gestaffelt auf. Die Klasse fliegt danach wieder
+// raus, damit späteres Neuzeichnen (Speichern, Abhaken) die Liste nicht erneut
+// durchtanzen lässt – Bewegung soll Handlung heißen, nicht Hintergrundrauschen.
+let tabAnimTimer = null;
+function zeigeTabAn(sec) {
+  clearTimeout(tabAnimTimer);
+  document.querySelectorAll(".tab-in").forEach((el) => el.classList.remove("tab-in"));
+  void sec.offsetWidth;   // Neustart erzwingen, falls derselbe Tab erneut kommt
+  sec.classList.add("tab-in");
+  tabAnimTimer = setTimeout(() => sec.classList.remove("tab-in"), 700);
+}
 
 /* ================= KALENDER-EXPORT ================= */
 // In ICS-Textfeldern sind \ ; , und Zeilenumbrüche Sonderzeichen (RFC 5545).

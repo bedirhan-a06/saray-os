@@ -16,6 +16,64 @@
 </head>
 <body>
 
+<!-- ================= Icons =================
+     Eigene Linien-Icons statt Emojis: gleiche Strichstärke, gleiche Sprache,
+     nehmen per currentColor die Farbe ihrer Umgebung an (Gold, wenn aktiv).
+     Das Haus-Icon ist bewusst die Palast-Kuppel aus dem Logo. -->
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5.6 20Q5.6 10.4 12 9.6 18.4 10.4 18.4 20"/><path d="M3.4 20h17.2"/>
+    <path d="M12 9.6V7.2"/><circle cx="12" cy="5.8" r="1.15"/>
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.2 7.5a2 2 0 0 1 2-2h3.6l2 2.2h8a2 2 0 0 1 2 2v6.8a2 2 0 0 1-2 2H5.2a2 2 0 0 1-2-2Z"/>
+  </symbol>
+  <symbol id="i-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2.6" y="5.2" width="18.8" height="13.6" rx="2.8"/><path d="M2.6 9.8h18.8"/><path d="M6.4 14.8h3.6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3.4" y="3.4" width="17.2" height="17.2" rx="4.6"/><path d="m8.2 12.3 2.7 2.7 5.1-5.6"/>
+  </symbol>
+  <symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6.4 3.2h6.4l6 5.6v10.4a1.6 1.6 0 0 1-1.6 1.6H6.4a1.6 1.6 0 0 1-1.6-1.6V4.8a1.6 1.6 0 0 1 1.6-1.6Z"/>
+    <path d="M12.8 3.2v5.6h6"/><path d="M8 13.2h7.2"/><path d="M8 16.4h4.6"/>
+  </symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 8h7"/><path d="M17 8h3"/><circle cx="14" cy="8" r="2.6"/>
+    <path d="M4 16h3"/><path d="M13 16h7"/><circle cx="10" cy="16" r="2.6"/>
+  </symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 9.2a6 6 0 1 0-12 0c0 4.6-1.9 6-1.9 6h15.8s-1.9-1.4-1.9-6Z"/><path d="M13.9 19a2.2 2.2 0 0 1-3.8 0"/>
+  </symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3.4" y="5.4" width="17.2" height="15.2" rx="2.6"/><path d="M3.4 10h17.2"/>
+    <path d="M8.4 3.4v4"/><path d="M15.6 3.4v4"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M12 5.5v13"/><path d="M5.5 12h13"/>
+  </symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <circle cx="12" cy="12" r="8.2"/>
+  </symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20h4l10.4-10.4a2.4 2.4 0 0 0-3.4-3.4L4.6 16.6Z"/><path d="M14.4 7.8l3.4 3.4"/>
+  </symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3.2" y="4.4" width="17.6" height="4.4" rx="1.4"/>
+    <path d="M5 8.8v9.4a1.6 1.6 0 0 0 1.6 1.6h10.8a1.6 1.6 0 0 0 1.6-1.6V8.8"/><path d="M9.8 12.6h4.4"/>
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M6.4 6.4l11.2 11.2"/><path d="M17.6 6.4L6.4 17.6"/>
+  </symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 9.5h10.5a5 5 0 0 1 0 10H8"/><path d="M7.8 5.4 3.6 9.5l4.2 4.1"/>
+  </symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.2 13.8a3.6 3.6 0 0 0 5.2 0l3-3a3.7 3.7 0 0 0-5.2-5.2l-1.5 1.5"/>
+    <path d="M13.8 10.2a3.6 3.6 0 0 0-5.2 0l-3 3a3.7 3.7 0 0 0 5.2 5.2l1.5-1.5"/>
+  </symbol>
+</svg>
+
 <!-- ================= AUTH ================= -->
 <div id="auth-view">
   <div class="auth-card">
@@ -68,12 +126,12 @@
         <div class="date" id="today-label"></div>
       </div>
     </div>
-    <button class="btn subtle" id="notif-btn" title="Erinnerungen aktivieren">🔔</button>
+    <button class="btn subtle icon-btn" id="notif-btn" title="Erinnerungen aktivieren" aria-label="Erinnerungen aktivieren"><svg class="ic" viewBox="0 0 24 24"><use href="#i-bell"/></svg></button>
   </header>
 
   <!-- ===== Tab: Übersicht ===== -->
   <section id="tab-home">
-    <div class="summary">
+    <div class="summary list">
       <div class="stat">
         <div class="label">Pro Monat</div>
         <div class="value gold-text" id="monthly-total">–</div>
@@ -104,24 +162,24 @@
     <div id="savings-banner" class="hint-banner hidden"></div>
 
     <div class="section-head"><h2>Nächste 7 Tage</h2></div>
-    <div class="agenda" id="agenda-container"></div>
+    <div class="agenda list" id="agenda-container"></div>
   </section>
 
   <!-- ===== Tab: Projekte ===== -->
   <section id="tab-projekte" class="hidden">
     <div class="section-head"><h2>Meine Projekte</h2></div>
     <div class="chip-row" id="project-kind-filter"></div>
-    <div class="cards" id="projects-container"></div>
+    <div class="cards list" id="projects-container"></div>
   </section>
 
   <!-- ===== Tab: Abos ===== -->
   <section id="tab-abos" class="hidden">
     <div class="section-head">
       <h2>Meine Abos</h2>
-      <button class="btn subtle" id="ics-btn" title="Zahltermine in Kalender exportieren">📅 Export</button>
+      <button class="btn subtle" id="ics-btn" title="Zahltermine in Kalender exportieren"><svg class="ic" viewBox="0 0 24 24"><use href="#i-calendar"/></svg>Export</button>
     </div>
     <div class="chip-row" id="cat-filter"></div>
-    <div class="cards" id="cards-container"></div>
+    <div class="cards list" id="cards-container"></div>
     <div class="section-head"><h2>Kosten nach Kategorie</h2></div>
     <div class="stats-panel">
       <div class="donut-wrap">
@@ -134,7 +192,7 @@
       <div class="bars" id="bars"></div>
     </div>
     <div class="section-head hidden" id="archive-head"><h2>Archiv</h2></div>
-    <div class="cards" id="archive-container"></div>
+    <div class="cards list" id="archive-container"></div>
   </section>
 
   <!-- ===== Tab: To-Dos ===== -->
@@ -143,9 +201,9 @@
     <div class="todo-quickadd">
       <input type="text" id="todo-quick-title" placeholder="Neues To-Do … (#tag geht auch)">
       <input type="date" id="todo-quick-date" title="Fälligkeit (optional)">
-      <button class="btn gold" id="todo-quick-add" title="Hinzufügen">+</button>
+      <button class="btn gold" id="todo-quick-add" title="Hinzufügen" aria-label="Hinzufügen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
     </div>
-    <div class="todos" id="todos-container"></div>
+    <div class="todos list" id="todos-container"></div>
   </section>
 
   <!-- ===== Tab: Notizen ===== -->
@@ -156,7 +214,7 @@
       <button class="btn gold" id="note-quick-add">Speichern</button>
     </div>
     <div class="chip-row hidden" id="note-tag-filter"></div>
-    <div class="notes" id="notes-container"></div>
+    <div class="notes list" id="notes-container"></div>
   </section>
 
   <!-- ===== Tab: Einstellungen ===== -->
@@ -252,15 +310,16 @@
     </div>
   </section>
 
-  <button class="fab" id="add-btn" title="Abo hinzufügen">+</button>
+  <!-- Start ist die Übersicht – dort legt der Knopf nichts an, also erst mal weg -->
+  <button class="fab hidden" id="add-btn" title="Abo hinzufügen" aria-label="Hinzufügen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
 
   <nav class="tabbar">
-    <button data-tab="home" class="active"><span class="ti">🏠</span>Übersicht</button>
-    <button data-tab="projekte"><span class="ti">📁</span>Projekte</button>
-    <button data-tab="abos"><span class="ti">💳</span>Abos</button>
-    <button data-tab="todos"><span class="ti">✅</span>To-Dos</button>
-    <button data-tab="notes"><span class="ti">📝</span>Notizen</button>
-    <button data-tab="settings"><span class="ti">⚙️</span>Einstellungen</button>
+    <button data-tab="home" class="active"><svg class="ti" viewBox="0 0 24 24"><use href="#i-home"/></svg>Übersicht</button>
+    <button data-tab="projekte"><svg class="ti" viewBox="0 0 24 24"><use href="#i-folder"/></svg>Projekte</button>
+    <button data-tab="abos"><svg class="ti" viewBox="0 0 24 24"><use href="#i-card"/></svg>Abos</button>
+    <button data-tab="todos"><svg class="ti" viewBox="0 0 24 24"><use href="#i-check"/></svg>To-Dos</button>
+    <button data-tab="notes"><svg class="ti" viewBox="0 0 24 24"><use href="#i-note"/></svg>Notizen</button>
+    <button data-tab="settings"><svg class="ti" viewBox="0 0 24 24"><use href="#i-sliders"/></svg>Einstellungen</button>
   </nav>
 </div>
 
