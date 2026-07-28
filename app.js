@@ -1866,6 +1866,13 @@ document.querySelectorAll(".tabbar button").forEach((btn) => {
     $("add-btn").classList.toggle("hidden", activeTab !== "abos" && activeTab !== "projekte");
     if (activeTab === "abos") renderStats();
     zeigeTabAn($("tab-" + activeTab));
+
+    // Kurzer Hüpfer nur beim Antippen, kein Dauerzustand – sonst sitzt der
+    // aktive Tab dauerhaft höher als die Nachbarn und die Reihe wirkt uneben.
+    const icon = btn.querySelector(".ti");
+    icon.classList.remove("huepft");
+    void icon.offsetWidth;
+    icon.classList.add("huepft");
   });
 });
 
