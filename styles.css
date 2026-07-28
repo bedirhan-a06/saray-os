@@ -85,7 +85,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .wordmark { text-align: center; margin-bottom: 26px; }
 .wordmark svg { display: block; margin: 0 auto 6px; }
 .wordmark h1 { font-size: 34px; font-weight: 700; letter-spacing: 0.5px; }
-.wordmark p { color: var(--text-dim); font-size: 13px; margin-top: 6px; }
+.wordmark .ornament { margin: 7px 0 4px; }
+.wordmark p { color: var(--text-dim); font-size: 13px; }
 .auth-card .field { margin-bottom: 14px; }
 .field label {
   display: block;
@@ -142,7 +143,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .lock-card { width: 100%; max-width: 320px; text-align: center; }
 .lock-card > svg { display: block; margin: 0 auto 8px; }
 .lock-card h1 { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
-.lock-hint { color: var(--text-dim); font-size: 13.5px; margin-top: 8px; min-height: 19px; }
+.lock-card .ornament { margin: 6px 0 2px; }
+.lock-hint { color: var(--text-dim); font-size: 13.5px; margin-top: 4px; min-height: 19px; }
 
 .pin-dots { display: flex; justify-content: center; gap: 14px; margin: 22px 0 30px; }
 .pin-dot {
@@ -199,11 +201,41 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 30px;
+  position: relative;
 }
 .app-header .wm { display: flex; align-items: center; gap: 10px; }
 .app-header .wm h1 { font-size: 22px; font-weight: 700; }
 .app-header .date { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
+
+/* ---------- Palast-Ornamentik ----------
+   Der Sternfries (Rub el Hizb – zwei ineinandergelegte Quadrate) läuft als
+   Kachel durch. Bewusst nur an drei Stellen: den beiden Toren (Anmeldung,
+   Schloss) und als Abschluss der Kopfzeile. Überall sonst wäre es Tapete. */
+.ornament {
+  height: 15px;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2060%2022%22%20fill%3D%22none%22%20stroke%3D%22%23d4af37%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22butt%22%20stroke-linejoin%3D%22miter%22%3E%20%3Cpath%20d%3D%22M23%2011%20L15%203%20L7%2011%20L15%2019%20Z%22%2F%3E%20%3Cpath%20d%3D%22M20.6569%205.3431%20L9.3431%205.3431%20L9.3431%2016.6569%20L20.6569%2016.6569%20Z%22%2F%3E%20%3Ccircle%20cx%3D%2215%22%20cy%3D%2211%22%20r%3D%221.9%22%2F%3E%20%3Cpath%20d%3D%22M0%2011%20H7%20M23%2011%20H41%20M49%2011%20H60%22%2F%3E%20%3Cpath%20d%3D%22M41%2011%20L45%207%20L49%2011%20L45%2015%20Z%22%2F%3E%20%3C%2Fsvg%3E");
+  background-repeat: repeat-x;
+  background-position: center;
+  background-size: 41px 15px;
+  opacity: 0.34;
+}
+/* Kopfzeile bekommt eine gezierte Unterkante statt einer nackten Linie */
+.app-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* mittig in die 30 px Luft unter der Kopfzeile, sonst stößt es an „Hallo, …" */
+  bottom: -22px;
+  height: 15px;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2060%2022%22%20fill%3D%22none%22%20stroke%3D%22%23d4af37%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22butt%22%20stroke-linejoin%3D%22miter%22%3E%20%3Cpath%20d%3D%22M23%2011%20L15%203%20L7%2011%20L15%2019%20Z%22%2F%3E%20%3Cpath%20d%3D%22M20.6569%205.3431%20L9.3431%205.3431%20L9.3431%2016.6569%20L20.6569%2016.6569%20Z%22%2F%3E%20%3Ccircle%20cx%3D%2215%22%20cy%3D%2211%22%20r%3D%221.9%22%2F%3E%20%3Cpath%20d%3D%22M0%2011%20H7%20M23%2011%20H41%20M49%2011%20H60%22%2F%3E%20%3Cpath%20d%3D%22M41%2011%20L45%207%20L49%2011%20L45%2015%20Z%22%2F%3E%20%3C%2Fsvg%3E");
+  background-repeat: repeat-x;
+  background-position: center;
+  background-size: 41px 15px;
+  opacity: 0.13;
+  pointer-events: none;
+}
 
 /* ---------- Stat-Kacheln ---------- */
 .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
@@ -346,10 +378,19 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .empty {
   text-align: center;
   color: var(--text-dim);
-  padding: 44px 20px;
+  padding: 38px 20px 40px;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   font-size: 14px;
+}
+/* Die Kuppel aus dem Logo – zurückhaltend, sie soll den Satz nicht überstrahlen */
+.empty-mark {
+  width: 30px;
+  height: 30px;
+  display: block;
+  margin: 0 auto 11px;
+  color: var(--gold-2);
+  opacity: 0.32;
 }
 .card {
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
@@ -751,7 +792,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   from { transform: translateY(32px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
-.modal h2 { font-size: 17px; margin-bottom: 16px; }
+/* Serif auch in den Fenster-Überschriften – nimmt den Schriftzug auf und
+   macht aus jedem Dialog eine betitelte Tafel statt eines Formularkastens */
+.modal h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 19px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
 /* Für Modals mit Löschen-Button in der Kopfzeile, statt in modal-actions */
 .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .modal-head h2 { margin-bottom: 16px; }

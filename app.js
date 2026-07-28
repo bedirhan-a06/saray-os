@@ -113,6 +113,12 @@ function svgIcon(name, cls) {
   return `<svg class="ic${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 }
 
+// Leerer Bereich mit der Palast-Kuppel darüber – dasselbe Zeichen wie im Logo
+// und im Übersicht-Tab. Wo nichts ist, steht wenigstens das Haus.
+function leerHTML(text) {
+  return `<div class="empty"><svg class="empty-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg>${text}</div>`;
+}
+
 /* ---- Tags: #wort in beliebigem Text wird zum app-weiten Querverweis ---- */
 // Ein Mechanismus für alles: Notiz-Inhalt, To-Do-Titel, Abo- und Projekt-Notiz.
 // Keine eigene Spalte – der Text selbst trägt die Verknüpfung.
@@ -927,7 +933,7 @@ function renderAgenda() {
   if (!box) return;
   const items = agendaItems();
   if (!items.length) {
-    box.innerHTML = `<div class="empty">In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig.</div>`;
+    box.innerHTML = leerHTML(`In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig.`);
     return;
   }
   box.innerHTML = items.map((it) => {
@@ -1035,7 +1041,7 @@ function renderCards() {
   if (activeCat !== "Alle") list = list.filter((s) => s.category === activeCat);
   container.innerHTML = list.length
     ? list.map((s) => cardHTML(s, false)).join("")
-    : `<div class="empty">Noch keine Abos${activeCat !== "Alle" ? " in dieser Kategorie" : ""} – tipp unten rechts auf „+“.</div>`;
+    : leerHTML(`Noch keine Abos${activeCat !== "Alle" ? " in dieser Kategorie" : ""} – tipp unten rechts auf „+“.`);
   container.querySelectorAll(".card").forEach((el) => {
     const id = el.dataset.id;
     el.querySelector(".edit")?.addEventListener("click", () => openModal(id));
@@ -1310,7 +1316,7 @@ function renderTodos() {
   const sorted = sortTodos(visible);
   container.innerHTML = sorted.length
     ? sorted.map(todoRowHTML).join("")
-    : `<div class="empty">Noch keine To-Dos – trag oben etwas ein.</div>`;
+    : leerHTML("Noch keine To-Dos – trag oben etwas ein.");
   container.querySelectorAll(".todo-row").forEach((el) => {
     const id = el.dataset.id;
     el.querySelector(".todo-check").addEventListener("click", (e) => { e.stopPropagation(); toggleTodo(id); });
@@ -1460,7 +1466,7 @@ function renderNotes() {
   if (activeNoteTag !== "Alle") list = list.filter((n) => extractTags(n.content).includes(activeNoteTag));
   container.innerHTML = list.length
     ? list.map(noteCardHTML).join("")
-    : `<div class="empty">${activeNoteTag !== "Alle" ? "Keine Notizen mit diesem Tag." : "Noch keine Notizen – trag oben etwas ein."}</div>`;
+    : leerHTML(activeNoteTag !== "Alle" ? "Keine Notizen mit diesem Tag." : "Noch keine Notizen – trag oben etwas ein.");
   container.querySelectorAll(".note-card").forEach((el) => {
     el.addEventListener("click", () => openNoteModal(el.dataset.id));
   });
@@ -1615,7 +1621,7 @@ function renderProjects() {
   if (activeProjectKind !== "Alle") list = list.filter((p) => p.kind === activeProjectKind);
   container.innerHTML = list.length
     ? list.map(projectCardHTML).join("")
-    : `<div class="empty">Noch keine Projekte${activeProjectKind !== "Alle" ? " dieser Art" : ""} – tipp unten rechts auf „+“.</div>`;
+    : leerHTML(`Noch keine Projekte${activeProjectKind !== "Alle" ? " dieser Art" : ""} – tipp unten rechts auf „+“.`);
   container.querySelectorAll(".project-card").forEach((el) => {
     el.addEventListener("click", () => openProjectModal(el.dataset.id));
     // Der Link soll die Seite öffnen, nicht das Modal
@@ -1767,7 +1773,7 @@ function openTagView(tag) {
   }
 
   const body = $("tag-view-body");
-  body.innerHTML = secs.join("") || `<div class="empty">Nichts weiter mit diesem Tag.</div>`;
+  body.innerHTML = secs.join("") || leerHTML("Nichts weiter mit diesem Tag.");
   body.querySelectorAll(".tag-row").forEach((el) =>
     el.addEventListener("click", () => openTagRow(el.dataset.art, el.dataset.id)));
   $("tag-overlay").classList.add("open");
