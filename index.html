@@ -72,6 +72,16 @@
     <path d="M10.2 13.8a3.6 3.6 0 0 0 5.2 0l3-3a3.7 3.7 0 0 0-5.2-5.2l-1.5 1.5"/>
     <path d="M13.8 10.2a3.6 3.6 0 0 0-5.2 0l-3 3a3.7 3.7 0 0 0 5.2 5.2l1.5-1.5"/>
   </symbol>
+  <symbol id="i-faceid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 8.5v-3a2 2 0 0 1 2-2h3"/><path d="M15.5 3.5h3a2 2 0 0 1 2 2v3"/>
+    <path d="M20.5 15.5v3a2 2 0 0 1-2 2h-3"/><path d="M8.5 20.5h-3a2 2 0 0 1-2-2v-3"/>
+    <path d="M8.8 9.6v1.6"/><path d="M15.2 9.6v1.6"/>
+    <path d="M12 9.6v3.2h-1"/><path d="M9.2 15.6a4 4 0 0 0 5.6 0"/>
+  </symbol>
+  <symbol id="i-backspace" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9.2 5.5h9.3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9.2L3 12Z"/>
+    <path d="M11.8 9.8l4.6 4.4"/><path d="M16.4 9.8l-4.6 4.4"/>
+  </symbol>
 </svg>
 
 <!-- ================= AUTH ================= -->
@@ -104,6 +114,27 @@
     <div class="auth-switch" id="auth-switch">
       Noch kein Konto? <button id="auth-toggle">Registrieren</button>
     </div>
+  </div>
+</div>
+
+<!-- ================= SCHLOSS ================= -->
+<div id="lock-view" class="hidden">
+  <div class="lock-card">
+    <svg width="52" height="38" viewBox="0 0 60 44" aria-hidden="true">
+      <defs>
+        <linearGradient id="wg3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f6e7b0"/><stop offset="50%" stop-color="#d4af37"/><stop offset="100%" stop-color="#a97f1f"/>
+        </linearGradient>
+      </defs>
+      <path d="M14 40 Q14 16 30 14 Q46 16 46 40" fill="none" stroke="url(#wg3)" stroke-width="3"/>
+      <line x1="30" y1="14" x2="30" y2="7" stroke="url(#wg3)" stroke-width="3"/>
+      <circle cx="30" cy="5" r="2.5" fill="url(#wg3)"/>
+    </svg>
+    <h1 class="serif gold-text" id="lock-title">Saray OS</h1>
+    <div class="lock-hint" id="lock-hint">PIN eingeben</div>
+    <div class="pin-dots" id="pin-dots"></div>
+    <div class="pin-pad" id="pin-pad"></div>
+    <button class="btn subtle" id="lock-abmelden">Stattdessen mit E-Mail anmelden</button>
   </div>
 </div>
 
@@ -294,6 +325,44 @@
           <div class="desc">Leer lassen = kein Limit</div>
         </div>
         <input type="number" id="set-budget" min="0" step="1" placeholder="z. B. 150">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>Sperre</h3>
+      <div class="setting-row">
+        <div>
+          PIN-Sperre
+          <div class="desc" id="lock-desc">Die Anmeldung wird mit deinem PIN verschlüsselt abgelegt</div>
+        </div>
+        <button class="btn" id="set-pin">Einrichten</button>
+      </div>
+      <div class="setting-row hidden" id="row-pin-aendern">
+        <div>PIN ändern</div>
+        <button class="btn" id="set-pin-aendern">Ändern</button>
+      </div>
+      <div class="setting-row hidden" id="row-faceid">
+        <div>
+          Face ID
+          <div class="desc" id="faceid-desc">Entsperren ohne PIN-Eingabe</div>
+        </div>
+        <button class="btn" id="set-faceid">Aktivieren</button>
+      </div>
+      <div class="setting-row hidden" id="row-sperrzeit">
+        <div>
+          Sperren nach
+          <div class="desc">So lange darf die App im Hintergrund liegen</div>
+        </div>
+        <select id="set-sperrzeit">
+          <option value="0">sofort</option>
+          <option value="60">1 Minute</option>
+          <option value="300">5 Minuten</option>
+          <option value="1800">30 Minuten</option>
+        </select>
+      </div>
+      <div class="setting-row hidden" id="row-jetzt-sperren">
+        <div>Jetzt sperren</div>
+        <button class="btn" id="set-jetzt-sperren">Sperren</button>
       </div>
     </div>
 
@@ -559,6 +628,7 @@
 
 <script src="vendor-supabase.js"></script>
 <script src="brands.js"></script>
+<script src="tresor.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

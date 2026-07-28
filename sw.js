@@ -1,11 +1,12 @@
 /* Saray OS Service Worker – Offline-Cache + Benachrichtigungen */
-const CACHE = "sarayos-v6";
+const CACHE = "sarayos-v7";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./brands.js",
+  "./tresor.js",
   "./vendor-supabase.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",

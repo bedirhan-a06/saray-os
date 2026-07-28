@@ -4,7 +4,14 @@
 /* ---- Supabase (eigenes Projekt von Bedirhan) ---- */
 const SUPABASE_URL = "https://whooaauysrlxkmhalqfm.supabase.co";
 const SUPABASE_KEY = "sb_publishable_yg_gPdvQYAxR8qEv0alR8Q_j0x0rfxI";
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Die Sitzung geht durch den Tresor: ohne eingerichtetes Schloss wie bisher in
+// den Klartext-Speicher, mit Schloss nur noch verschlüsselt (siehe tresor.js).
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { storage: Tresor.speicher, persistSession: true, autoRefreshToken: true }
+});
+// Alle Schlüssel, unter denen Supabase seine Sitzung ablegt – beim Einrichten
+// des Schlosses ziehen genau die in den Tresor um.
+const sitzungsSchluessel = () => Object.keys(localStorage).filter((k) => k.startsWith("sb-"));
 
 /* ---- Konstanten ---- */
 const CATEGORIES = {
@@ -182,10 +189,293 @@ function showToast(msg) {
   showToast._t = setTimeout(() => t.classList.remove("show"), 2300);
 }
 
+/* ================= SCHLOSS =================
+   Sitzt vor der Anmeldung: liegt ein Tresor vor, kommt zuerst der PIN- bzw.
+   Face-ID-Bildschirm. Die eigentliche Ver- und Entschlüsselung steckt in
+   tresor.js – hier steht nur, was der Nutzer davon sieht. */
+
+const SPERRZEIT_SCHLUESSEL = "saray.sperrzeit";
+let pinEingabe = "";
+let pinModus = "entsperren";   // entsperren | alt | neu | wiederholen
+let pinErstEingabe = "";
+let pinAlt = "";               // beim Ändern: der bestätigte bisherige PIN
+let hintergrundSeit = null;
+
+function sperrzeit() {
+  const v = parseInt(localStorage.getItem(SPERRZEIT_SCHLUESSEL) ?? "300", 10);
+  return Number.isFinite(v) ? v : 300;
+}
+
+function zeichnePinPunkte() {
+  $("pin-dots").innerHTML = Array.from({ length: Tresor.PIN_LAENGE }, (_, i) =>
+    `<span class="pin-dot ${i < pinEingabe.length ? "voll" : ""}"></span>`).join("");
+}
+
+function bauePinFeld() {
+  const tasten = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "bio", "0", "weg"];
+  $("pin-pad").innerHTML = tasten.map((t) => {
+    if (t === "bio") return `<button class="pin-key nebentaste" data-k="bio" aria-label="Mit Face ID entsperren">${svgIcon("faceid")}</button>`;
+    if (t === "weg") return `<button class="pin-key nebentaste" data-k="weg" aria-label="Löschen">${svgIcon("backspace")}</button>`;
+    return `<button class="pin-key" data-k="${t}">${t}</button>`;
+  }).join("");
+  $("pin-pad").querySelectorAll(".pin-key").forEach((b) =>
+    b.addEventListener("click", () => pinTaste(b.dataset.k)));
+}
+
+function pinTaste(k) {
+  if (k === "weg") { pinEingabe = pinEingabe.slice(0, -1); zeichnePinPunkte(); return; }
+  if (k === "bio") { entsperreMitFaceId(); return; }
+  if (pinEingabe.length >= Tresor.PIN_LAENGE) return;
+  pinEingabe += k;
+  zeichnePinPunkte();
+  if (pinEingabe.length === Tresor.PIN_LAENGE) setTimeout(pinVollstaendig, 120);
+}
+
+function pinFehlerWackeln(text) {
+  $("lock-hint").textContent = text;
+  const karte = document.querySelector(".lock-card");
+  karte.classList.remove("wackelt");
+  void karte.offsetWidth;
+  karte.classList.add("wackelt");
+  pinEingabe = "";
+  zeichnePinPunkte();
+}
+
+async function pinVollstaendig() {
+  const eingabe = pinEingabe;
+  pinEingabe = "";
+  zeichnePinPunkte();
+
+  // Schritt 1 beim Ändern: der bisherige PIN muss stimmen. Das läuft über
+  // denselben Fehlversuchszähler wie das normale Entsperren – also muss hier
+  // auch die Sperre behandelt werden, sonst stünde man nach zehn Tippfehlern
+  // vor einem Schlossbildschirm, hinter dem nichts mehr liegt.
+  if (pinModus === "alt") {
+    try {
+      await Tresor.entsperreMitPin(eingabe);   // prüft und entsperrt zugleich
+    } catch (err) {
+      if (err.message === "gesperrt") {
+        Tresor.verwerfen();
+        $("lock-view").classList.add("hidden");
+        $("auth-view").classList.remove("hidden");
+        $("auth-error").textContent = "Zu viele Fehlversuche. Melde dich einmal mit E-Mail und Passwort an.";
+        return;
+      }
+      const rest = Tresor.MAX_FEHLVERSUCHE - Tresor.fehlversuche();
+      pinFehlerWackeln(rest <= 3 ? `Falscher PIN – noch ${rest} Versuche` : "Falscher PIN");
+      return;
+    }
+    pinAlt = eingabe;
+    pinModus = "neu";
+    $("lock-title").textContent = "Neuer PIN";
+    $("lock-hint").textContent = `${Tresor.PIN_LAENGE} Ziffern`;
+    return;
+  }
+
+  // Schritt 2: neuer PIN, danach zur Kontrolle noch einmal
+  if (pinModus === "neu") {
+    pinErstEingabe = eingabe;
+    pinModus = "wiederholen";
+    $("lock-hint").textContent = "Zur Sicherheit nochmal";
+    return;
+  }
+
+  if (pinModus === "wiederholen") {
+    if (eingabe !== pinErstEingabe) {
+      pinModus = "neu";
+      pinErstEingabe = "";
+      pinFehlerWackeln("Stimmt nicht überein – nochmal von vorn");
+      return;
+    }
+    $("lock-hint").textContent = "Einen Moment …";
+    try {
+      if (pinAlt) await Tresor.pinAendern(pinAlt, eingabe);
+      else await Tresor.einrichten(eingabe, sitzungsSchluessel());
+      pinAlt = "";
+      schliesseSchloss();
+      $("app-view").classList.remove("hidden");
+      zeichneSperreEinstellungen();
+      showToast(Tresor.hatFaceId() ? "PIN geändert" : "PIN eingerichtet");
+    } catch (err) {
+      console.error(err);
+      pinModus = "neu";
+      pinFehlerWackeln("Hat nicht geklappt");
+    }
+    return;
+  }
+
+  // Normalfall: entsperren. Das Zurückgeben der Sitzung steht bewusst NICHT im
+  // selben try – sonst würde eine abgelaufene Sitzung als „Falscher PIN" gemeldet.
+  $("lock-hint").textContent = "Einen Moment …";
+  try {
+    await Tresor.entsperreMitPin(eingabe);
+  } catch (err) {
+    if (err.message === "gesperrt") {
+      Tresor.verwerfen();
+      $("lock-view").classList.add("hidden");
+      $("auth-view").classList.remove("hidden");
+      $("auth-error").textContent = "Zu viele Fehlversuche. Melde dich einmal mit E-Mail und Passwort an.";
+      return;
+    }
+    const rest = Tresor.MAX_FEHLVERSUCHE - Tresor.fehlversuche();
+    pinFehlerWackeln(rest <= 3 ? `Falscher PIN – noch ${rest} Versuche` : "Falscher PIN");
+    return;
+  }
+  await nachEntsperren();
+}
+
+async function entsperreMitFaceId() {
+  if (!Tresor.hatFaceId()) { $("lock-hint").textContent = "Face ID ist nicht eingerichtet"; return; }
+  $("lock-hint").textContent = "Face ID …";
+  try {
+    await Tresor.entsperreMitFaceId();
+    await nachEntsperren();
+  } catch (err) {
+    console.warn("Face ID:", err);
+    $("lock-hint").textContent = "Face ID hat nicht geklappt – PIN eingeben";
+  }
+}
+
+// Die entschlüsselte Sitzung an Supabase zurückgeben. Ist der Refresh-Token
+// abgelaufen oder zurückgezogen, hilft nur noch die normale Anmeldung.
+// Nur wegwerfen, wenn der Server die Sitzung wirklich abgelehnt hat. Ein
+// Netzfehler darf das NICHT auslösen: das Chiffrat ist die einzige Kopie der
+// Anmeldung – eine Fahrt ohne Empfang würde sie sonst endgültig vernichten.
+function serverHatAbgelehnt(err) {
+  if (!err) return false;
+  if (err.name === "AuthRetryableFetchError") return false;
+  if (navigator.onLine === false) return false;
+  const st = Number(err.status);
+  return st === 400 || st === 401 || st === 403 || st === 422;
+}
+
+async function nachEntsperren() {
+  const s = Tresor.sitzungsDaten();
+  if (!s) { tresorUnbrauchbar(); return; }
+  let fehler = null;
+  try {
+    const { error } = await db.auth.setSession({ access_token: s.access_token, refresh_token: s.refresh_token });
+    fehler = error;
+  } catch (err) { fehler = err; }
+
+  if (!fehler) { schliesseSchloss(); return; }
+
+  if (serverHatAbgelehnt(fehler)) { console.warn("Sitzung abgelehnt:", fehler); tresorUnbrauchbar(); return; }
+
+  // Kein Netz: Tresor bleibt, wie er ist. Sobald wieder Verbindung da ist,
+  // geht es von selbst weiter – ohne dass der PIN nochmal gebraucht wird.
+  console.warn("Keine Verbindung beim Entsperren:", fehler);
+  $("lock-hint").textContent = "Keine Verbindung – es geht weiter, sobald du online bist";
+  window.addEventListener("online", () => nachEntsperren(), { once: true });
+}
+
+function tresorUnbrauchbar() {
+  Tresor.verwerfen();
+  $("lock-view").classList.add("hidden");
+  $("auth-view").classList.remove("hidden");
+  $("auth-error").textContent = "Die gespeicherte Anmeldung gilt nicht mehr. Bitte einmal neu anmelden.";
+}
+
+function zeigeSchloss(modus) {
+  pinModus = modus || "entsperren";
+  pinEingabe = "";
+  pinErstEingabe = "";
+  $("auth-view").classList.add("hidden");
+  $("app-view").classList.add("hidden");
+  $("lock-view").classList.remove("hidden");
+  const titel = { neu: "PIN festlegen", alt: "Bisheriger PIN", wiederholen: "PIN festlegen" };
+  $("lock-title").textContent = titel[pinModus] || "Saray OS";
+  $("lock-hint").textContent = pinModus === "neu" ? `${Tresor.PIN_LAENGE} Ziffern` : "PIN eingeben";
+  $("lock-abmelden").classList.toggle("hidden", pinModus !== "entsperren");
+  bauePinFeld();
+  zeichnePinPunkte();
+  // Face-ID-Taste nur zeigen, wenn sie auch etwas tut
+  const bio = $("pin-pad").querySelector('[data-k="bio"]');
+  if (bio) bio.classList.toggle("unsichtbar", pinModus !== "entsperren" || !Tresor.hatFaceId());
+}
+
+function schliesseSchloss() {
+  $("lock-view").classList.add("hidden");
+  pinEingabe = "";
+  pinErstEingabe = "";
+}
+
+$("lock-abmelden").addEventListener("click", async () => {
+  if (!confirm("Schloss entfernen und neu mit E-Mail anmelden?")) return;
+  Tresor.verwerfen();
+  await db.auth.signOut({ scope: "local" }).catch(() => {});
+  location.reload();
+});
+
+/* ---- Automatisch sperren ---- */
+// Beim Zurückkommen aus dem Hintergrund neu laden: so ist garantiert nichts
+// Entschlüsseltes mehr im Speicher, nicht nur unsichtbar.
+function jetztSperren() {
+  // Erst verdecken, dann neu laden: das Neuladen braucht einen Moment, und
+  // solange bliebe die entschlüsselte App sonst sichtbar und bedienbar.
+  $("app-view").classList.add("hidden");
+  $("lock-view").classList.remove("hidden");
+  $("lock-hint").textContent = "PIN eingeben";
+  location.reload();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!Tresor.eingerichtet() || !Tresor.entsperrt()) return;
+  if (document.hidden) { hintergrundSeit = Date.now(); return; }
+  const zuLange = hintergrundSeit && Date.now() - hintergrundSeit >= sperrzeit() * 1000;
+  hintergrundSeit = null;
+  if (zuLange) jetztSperren();
+});
+
+/* ---- Einstellungen zur Sperre ---- */
+async function zeichneSperreEinstellungen() {
+  const an = Tresor.eingerichtet();
+  $("set-pin").textContent = an ? "Entfernen" : "Einrichten";
+  $("lock-desc").textContent = an
+    ? "Die Anmeldung liegt auf diesem Gerät nur verschlüsselt"
+    : "Die Anmeldung wird mit deinem PIN verschlüsselt abgelegt";
+  ["row-pin-aendern", "row-faceid", "row-sperrzeit", "row-jetzt-sperren"]
+    .forEach((id) => $(id).classList.toggle("hidden", !an));
+  if (!an) return;
+
+  const hat = Tresor.hatFaceId();
+  $("set-faceid").textContent = hat ? "Entfernen" : "Aktivieren";
+  // Ohne Plattform-Authentifikator gibt es hier schlicht nichts zu holen
+  const moeglich = await Tresor.faceIdMoeglich();
+  $("set-faceid").disabled = !moeglich && !hat;
+  $("faceid-desc").textContent = hat
+    ? "Entsperren ohne PIN-Eingabe"
+    : moeglich ? "Entsperren ohne PIN-Eingabe" : "Auf diesem Gerät nicht verfügbar";
+}
+
+async function faceIdUmschalten() {
+  if (Tresor.hatFaceId()) {
+    Tresor.faceIdEntfernen();
+    zeichneSperreEinstellungen();
+    showToast("Face ID entfernt");
+    return;
+  }
+  const btn = $("set-faceid");
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    await Tresor.faceIdEinrichten(user?.email, profile?.display_name);
+    showToast("Face ID aktiv");
+  } catch (err) {
+    console.warn("Face ID:", err);
+    showToast(err.message === "kein-prf"
+      ? "Dieses Gerät kann Face ID nicht zum Entschlüsseln nutzen"
+      : "Face ID wurde abgebrochen");
+  } finally {
+    btn.disabled = false;
+    zeichneSperreEinstellungen();
+  }
+}
+
 /* ================= AUTH ================= */
 async function initAuth() {
-  const { data: { session } } = await db.auth.getSession();
-  if (session) { user = session.user; await enterApp(); }
+  // Zuerst horchen, dann erst verzweigen: nach dem Entsperren gibt setSession()
+  // die Sitzung zurück, und genau dieser Zuhörer startet dann die App.
   db.auth.onAuthStateChange(async (event, session2) => {
     if (event === "SIGNED_IN" && session2 && !user) {
       user = session2.user;
@@ -197,6 +487,13 @@ async function initAuth() {
       $("auth-view").classList.remove("hidden");
     }
   });
+
+  // Liegt ein Tresor vor, kommt niemand an der Sperre vorbei: die Sitzung ist
+  // bis zum Entsperren nicht einmal lesbar, Supabase bekommt hier nichts.
+  if (Tresor.eingerichtet()) { zeigeSchloss("entsperren"); return; }
+
+  const { data: { session } } = await db.auth.getSession();
+  if (session) { user = session.user; await enterApp(); }
 }
 
 $("auth-toggle").addEventListener("click", () => {
@@ -249,6 +546,10 @@ $("logout-btn").addEventListener("click", async () => {
   // Erst abmelden vom Push, sonst bekaeme das Geraet weiter fremde Erinnerungen
   await unregisterPush();
   await db.auth.signOut();
+  // Der Tresor hielte sonst eine widerrufene Sitzung fest und würde beim
+  // nächsten Start nach einem PIN fragen, hinter dem nichts Gültiges liegt.
+  Tresor.verwerfen();
+  zeichneSperreEinstellungen();
 });
 
 /* ---- Passwort ändern ---- */
@@ -1510,6 +1811,20 @@ function bindSettingsUI() {
     saveProfile({ monthly_budget: v });
     renderBudget();
   };
+  zeichneSperreEinstellungen();
+  $("set-pin").onclick = () => {
+    if (!Tresor.eingerichtet()) { zeigeSchloss("neu"); return; }
+    if (!confirm("Schloss entfernen? Die Anmeldung liegt danach wieder unverschlüsselt auf diesem Gerät.")) return;
+    Tresor.aufheben();
+    zeichneSperreEinstellungen();
+    showToast("Schloss entfernt");
+  };
+  $("set-pin-aendern").onclick = () => zeigeSchloss("alt");
+  $("set-faceid").onclick = faceIdUmschalten;
+  $("set-sperrzeit").value = String(sperrzeit());
+  $("set-sperrzeit").onchange = (e) => localStorage.setItem(SPERRZEIT_SCHLUESSEL, e.target.value);
+  $("set-jetzt-sperren").onclick = jetztSperren;
+
   $("set-push").onclick = requestPush;
   $("set-push-test").onclick = async (e) => {
     const btn = e.currentTarget;

@@ -128,6 +128,62 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .auth-switch { text-align: center; margin-top: 16px; font-size: 13.5px; color: var(--text-dim); }
 .auth-switch button { color: var(--gold-2); font-weight: 600; font-size: 13.5px; }
 
+/* ---------- Schloss (PIN / Face ID) ---------- */
+#lock-view {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px max(20px, env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom));
+  background: radial-gradient(ellipse at 50% 0%, #161b28 0%, var(--bg) 60%);
+}
+.lock-card { width: 100%; max-width: 320px; text-align: center; }
+.lock-card > svg { display: block; margin: 0 auto 8px; }
+.lock-card h1 { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
+.lock-hint { color: var(--text-dim); font-size: 13.5px; margin-top: 8px; min-height: 19px; }
+
+.pin-dots { display: flex; justify-content: center; gap: 14px; margin: 22px 0 30px; }
+.pin-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.pin-dot.voll { background: var(--gold-grad); border-color: transparent; transform: scale(1.15); }
+
+/* Feste Spaltenbreite statt 1fr – sonst werden aus den Kreisen Ellipsen */
+.pin-pad { display: grid; grid-template-columns: repeat(3, 72px); justify-content: center; gap: 18px; }
+.pin-key {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  font-size: 24px;
+  font-weight: 500;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s, background 0.15s;
+}
+.pin-key:active { transform: scale(0.92); background: var(--panel); }
+/* Face ID und Löschen sitzen neben der Null und bleiben zurückhaltend */
+.pin-key.nebentaste { background: none; border-color: transparent; color: var(--text-dim); }
+.pin-key.nebentaste .ic { width: 25px; height: 25px; }
+.pin-key.unsichtbar { visibility: hidden; pointer-events: none; }
+#lock-abmelden { margin-top: 22px; font-size: 13.5px; }
+
+@keyframes wackeln {
+  10%, 90% { transform: translateX(-4px); }
+  30%, 70% { transform: translateX(7px); }
+  50% { transform: translateX(-7px); }
+}
+.lock-card.wackelt { animation: wackeln 0.4s; }
+
 /* ---------- App-Layout ---------- */
 /* viewport-fit=cover laesst den Inhalt bis unter die iOS-Statusleiste laufen.
    Ohne den safe-area-Abstand liegt die Kopfzeile unter Uhrzeit und Akku. */
