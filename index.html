@@ -292,6 +292,32 @@
     </div>
 
     <div class="settings-group">
+      <h3>Google Kalender</h3>
+      <div class="setting-row">
+        <div>
+          Kalender-Adresse
+          <div class="desc" id="gcal-status">Zeigt deine Termine mit in der Übersicht</div>
+        </div>
+        <input type="password" id="set-gcal-url" autocomplete="off" placeholder="private iCal-Adresse">
+      </div>
+      <div class="setting-row">
+        <div>
+          Verknüpfen
+          <div class="desc">Google Kalender → Einstellungen → „Privatadresse im iCal-Format" kopieren</div>
+        </div>
+        <button class="btn" id="set-gcal-save">Speichern</button>
+      </div>
+      <div class="setting-row hidden" id="row-gcal-test">
+        <div>Verbindung testen</div>
+        <button class="btn" id="set-gcal-test">Testen</button>
+      </div>
+      <div class="setting-row hidden" id="row-gcal-remove">
+        <div>Verknüpfung entfernen</div>
+        <button class="btn danger" id="set-gcal-remove">Entfernen</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
       <h3>Darstellung</h3>
       <div class="setting-row">
         <div>

@@ -57,3 +57,34 @@ select status_code, content from net._http_response order by id desc limit 1;
 
 iOS lässt Push-Anmeldungen still verfallen. Deshalb frischt die App die
 Anmeldung bei jedem Start auf (`registerPush()` in `app.js`).
+
+## Google Kalender
+
+Die Übersicht zeigt Termine aus dem eigenen Google-Kalender mit an – read-only,
+ohne OAuth. Grundlage ist die private iCal-Adresse, die Google pro Kalender
+anbietet (Einstellungen → „Privatadresse im iCal-Format"). Der Nutzer trägt sie
+einmal in den App-Einstellungen ein.
+
+### Bestandteile
+
+| Wo | Was |
+| --- | --- |
+| `functions/google-calendar/index.ts` | Edge Function, eine Aktion: `sync` |
+| Tabelle `google_calendar_feeds` | eine Adresse je Nutzer, per RLS auf den Besitzer beschränkt |
+
+### Warum über den Server
+
+`calendar.google.com` erlaubt kein Cross-Origin-fetch aus dem Browser. Die
+Function holt den Feed serverseitig, parst ihn mit `ical.js` (löst auch
+Wiederholungsregeln auf) und liefert nur Titel, Datum und Uhrzeit der nächsten
+30 Tage zurück – die private Adresse verlässt den Server nie. Kein Cron-Job:
+die App ruft beim Start ab und hält das Ergebnis 15 Minuten im Client-Cache.
+
+### Wenn keine Termine kommen
+
+1. Einstellungen → Google Kalender → „Testen" drücken – die Meldung nennt den Grund.
+2. „Adresse ungültig": Die Privatadresse wurde in Google zurückgesetzt oder
+   falsch kopiert. Neue Adresse aus den Google-Kalender-Einstellungen holen.
+3. Statusfelder in `google_calendar_feeds` (`last_status`, `last_error`) zeigen
+   das Ergebnis des letzten Abrufs.
+4. Logs: Supabase Dashboard → Edge Functions → `google-calendar`.

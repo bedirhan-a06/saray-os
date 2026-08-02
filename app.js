@@ -41,6 +41,8 @@ let activeProjectKind = "Alle";
 let authMode = "login"; // 'login' | 'register'
 let activeCat = "Alle";
 let activeTab = "home";
+let googleFeed = null;    // Zeile aus google_calendar_feeds oder null
+let googleEvents = [];    // Termine aus dem Google-Kalender, fürs Agenda-Fenster
 let dismissedSavings = false;
 // Merkt sich das eine To-Do, das gerade angetippt wurde. renderAll() baut die
 // Zeilen neu auf – ohne diese Markierung würde der Häkchen-Impuls bei jedem
@@ -489,6 +491,8 @@ async function initAuth() {
     }
     if (event === "SIGNED_OUT") {
       user = null; profile = null; subs = []; todos = []; notes = []; projects = [];
+      googleFeed = null; googleEvents = [];
+      localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
       $("app-view").classList.add("hidden");
       $("auth-view").classList.remove("hidden");
     }
@@ -643,6 +647,8 @@ async function enterApp() {
   await loadTodos();
   await loadNotes();
   await loadProjects();
+  await loadGoogleFeed();
+  await loadGoogleEvents();
   bindSettingsUI();
   renderAll();
   zeigeTabAn($("tab-" + activeTab));   // beim Start zieht die Übersicht einmal auf
@@ -697,6 +703,39 @@ async function loadProjects() {
   const { data, error } = await db.from("projects").select("*").order("created_at", { ascending: false });
   if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
   projects = data || [];
+}
+
+/* ---- Google-Kalender ----
+   Die private iCal-Adresse liegt RLS-geschützt in google_calendar_feeds.
+   Abgerufen wird über die Edge Function (der Browser darf calendar.google.com
+   nicht direkt fragen – kein CORS). Kurzer Cache, damit schnelles Schließen
+   und Wiederöffnen der App nicht jedes Mal einen Google-Abruf auslöst. */
+const GCAL_CACHE_SCHLUESSEL = "saray.google-cal.cache";
+const GCAL_CACHE_MINUTEN = 15;
+
+async function loadGoogleFeed() {
+  const { data } = await db.from("google_calendar_feeds").select("*").eq("user_id", user.id).maybeSingle();
+  googleFeed = data || null;
+}
+
+async function loadGoogleEvents() {
+  googleEvents = [];
+  if (!googleFeed) return;   // nichts verknüpft – kein Aufruf
+  try {
+    const cache = JSON.parse(localStorage.getItem(GCAL_CACHE_SCHLUESSEL) || "null");
+    if (cache && cache.userId === user.id && Date.now() - cache.at < GCAL_CACHE_MINUTEN * 60000) {
+      googleEvents = cache.events || [];
+      return;
+    }
+  } catch (_) { /* kaputter Cache-Eintrag – einfach frisch laden */ }
+  // Bewusst leise bei Fehlern: ein kaputter Link soll nicht bei jedem
+  // App-Start einen Toast auslösen – der Test-Knopf in den Einstellungen meldet es.
+  const { data, error } = await db.functions.invoke("google-calendar", { body: { action: "sync" } });
+  if (error || !data || data.error) { console.warn("Google-Kalender:", error || data?.error); return; }
+  googleEvents = data.events || [];
+  try {
+    localStorage.setItem(GCAL_CACHE_SCHLUESSEL, JSON.stringify({ userId: user.id, at: Date.now(), events: googleEvents }));
+  } catch (_) { /* Privatmodus o. Ä. – dann eben ohne Cache */ }
 }
 
 async function saveProfile(patch) {
@@ -913,6 +952,11 @@ function agendaItems() {
     // Überfällige Deadlines bleiben stehen, bis der Status umgestellt wird
     if (d <= grenze) items.push({ art: "projekt", datum: d, p });
   });
+  googleEvents.forEach((g) => {
+    const d = new Date(g.date + "T00:00:00");
+    // Vergangenes interessiert hier nicht – der Kalender ist kein To-Do
+    if (d >= heute && d <= grenze) items.push({ art: "google", datum: d, g });
+  });
   return items.sort((a, b) => a.datum - b.datum);
 }
 
@@ -959,6 +1003,17 @@ function renderAgenda() {
         ${agendaChip(it.p.due_date, it.datum)}
       </div>`;
     }
+    if (it.art === "google") {
+      return `
+      <div class="agenda-row" data-art="google" data-id="${esc(it.g.uid)}">
+        <div class="icon">${svgIcon("calendar")}</div>
+        <div class="agenda-body">
+          <div class="agenda-title">${esc(it.g.title)}</div>
+          <div class="agenda-meta">Kalender${it.g.time ? ` · ${esc(it.g.time)} Uhr` : ""}</div>
+        </div>
+        ${agendaChip(it.g.date, it.datum)}
+      </div>`;
+    }
     const zu = todoParentName(it.t);
     return `
     <div class="agenda-row" data-art="todo" data-id="${it.t.id}">
@@ -977,9 +1032,12 @@ function renderAgenda() {
       el.querySelector(".agenda-body").addEventListener("click", () => openTodoModal(id));
     } else if (el.dataset.art === "projekt") {
       el.addEventListener("click", () => openProjectModal(id));
-    } else {
+    } else if (el.dataset.art === "abo") {
       el.addEventListener("click", () => openModal(id));
     }
+    // art === "google": bewusst kein Klick-Ziel. Der ICS-Export von Google
+    // liefert keine brauchbare Sprungadresse zum einzelnen Termin – ein Link
+    // auf die generische Kalenderansicht wäre mehr Verwirrung als Nutzen.
   });
 }
 
@@ -1793,6 +1851,43 @@ document.addEventListener("click", (e) => {
 }, true);
 
 /* ================= EINSTELLUNGEN ================= */
+/* ---- Einstellungen: Google Kalender ---- */
+function gcalFehlertext(code) {
+  return {
+    "ungueltige-url": "Adresse ungültig oder nicht mehr freigegeben",
+    "netzwerk": "Kalender gerade nicht erreichbar",
+  }[code] || "Kalender konnte nicht geladen werden";
+}
+
+function zeichneGcalEinstellungen() {
+  const verknuepft = !!googleFeed;
+  $("row-gcal-test").classList.toggle("hidden", !verknuepft);
+  $("row-gcal-remove").classList.toggle("hidden", !verknuepft);
+  $("gcal-status").textContent = !verknuepft
+    ? "Zeigt deine Termine mit in der Übersicht"
+    : googleFeed.last_status === "error"
+      ? "Verknüpft – " + gcalFehlertext(googleFeed.last_error)
+      : googleFeed.last_fetched_at
+        ? `Verknüpft – zuletzt geprüft ${fmtDate(new Date(googleFeed.last_fetched_at))}`
+        : "Verknüpft";
+}
+
+async function testeGcal() {
+  const btn = $("set-gcal-test");
+  btn.disabled = true;
+  try {
+    localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
+    await loadGoogleEvents();
+    await loadGoogleFeed();   // frische Statusfelder aus der DB
+    zeichneGcalEinstellungen();
+    renderAgenda();
+    if (googleFeed?.last_status === "error") showToast(gcalFehlertext(googleFeed.last_error));
+    else showToast(googleEvents.length === 1 ? "1 Termin gefunden" : `${googleEvents.length} Termine gefunden`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function bindSettingsUI() {
   $("set-name").value = profile.display_name || "";
   $("set-reminders").checked = !!profile.reminders_enabled;
@@ -1817,6 +1912,39 @@ function bindSettingsUI() {
     saveProfile({ monthly_budget: v });
     renderBudget();
   };
+  zeichneGcalEinstellungen();
+  $("set-gcal-save").onclick = async () => {
+    const url = $("set-gcal-url").value.trim();
+    if (!url) { showToast("Bitte die Adresse einfügen"); return; }
+    // Grobe Formprüfung – ob die Adresse wirklich stimmt, zeigt der Test danach
+    if (!/^https:\/\/calendar\.google\.com\/calendar\/ical\//.test(url)) {
+      showToast("Das ist keine Google-Kalender-Adresse");
+      return;
+    }
+    const { error } = await db.from("google_calendar_feeds")
+      .upsert({ user_id: user.id, ical_url: url, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    if (error) { showToast("Fehler beim Speichern"); console.error(error); return; }
+    // Die Adresse ist ein Geheimnis: nach dem Speichern nie wieder anzeigen,
+    // nur der Status – dasselbe Prinzip wie beim PIN.
+    $("set-gcal-url").value = "";
+    localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
+    await loadGoogleFeed();
+    zeichneGcalEinstellungen();
+    await testeGcal();
+  };
+  $("set-gcal-test").onclick = testeGcal;
+  $("set-gcal-remove").onclick = async () => {
+    if (!confirm("Google-Kalender-Verknüpfung entfernen?")) return;
+    const { error } = await db.from("google_calendar_feeds").delete().eq("user_id", user.id);
+    if (error) { showToast("Fehler beim Entfernen"); console.error(error); return; }
+    googleFeed = null;
+    googleEvents = [];
+    localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
+    zeichneGcalEinstellungen();
+    renderAgenda();
+    showToast("Entfernt");
+  };
+
   zeichneSperreEinstellungen();
   $("set-pin").onclick = () => {
     if (!Tresor.eingerichtet()) { zeigeSchloss("neu"); return; }
