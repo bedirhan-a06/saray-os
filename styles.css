@@ -108,7 +108,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   font-weight: 600;
   background: var(--panel-2);
   border: 1px solid var(--border);
-  transition: transform 0.1s, filter 0.15s;
+  transition: transform var(--dur-tap) var(--ease-standard), filter 0.15s;
 }
 .btn:active { transform: scale(0.97); }
 .btn.gold {
@@ -170,7 +170,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.12s, background 0.15s;
+  transition: transform var(--dur-tap) var(--ease-standard), background 0.15s;
 }
 .pin-key:active { transform: scale(0.92); background: var(--panel); }
 /* Face ID und Löschen sitzen neben der Null und bleiben zurückhaltend */
@@ -335,7 +335,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   font-weight: 600;
   border: 1px solid var(--border);
   background: var(--panel-2);
-  transition: filter 0.15s, transform 0.1s;
+  transition: filter 0.15s, transform var(--dur-tap) var(--ease-standard);
 }
 .ov-actions button:active { transform: scale(0.97); }
 .ov-actions .ov-paid { background: var(--gold-grad); color: #14110a; border: none; }
@@ -693,7 +693,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 20px;
-  transition: 0.2s;
+  transition: 0.2s var(--ease-standard);
 }
 .slider::before {
   content: "";
@@ -704,7 +704,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   top: 2px;
   border-radius: 50%;
   background: var(--text-dim);
-  transition: 0.2s;
+  transition: 0.2s var(--ease-standard);
 }
 .switch input:checked + .slider { background: var(--gold-grad); border-color: transparent; }
 .switch input:checked + .slider::before { transform: translateX(19px); background: #14110a; }
@@ -751,7 +751,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   40% { transform: translateY(-1.5px) scale(1.08); }
   100% { transform: none; }
 }
-.tabbar button .ti.huepft { animation: tabHuepf 0.28s cubic-bezier(0.2, 1.3, 0.4, 1); }
+.tabbar button .ti.huepft { animation: tabHuepf var(--dur-pop) var(--ease-bounce); }
 
 /* ---------- FAB ---------- */
 .fab {
@@ -857,7 +857,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   font-size: 13px;
   font-weight: 600;
   opacity: 0;
-  transition: 0.2s;
+  transition: 0.2s var(--ease-standard);
   z-index: 60;
   pointer-events: none;
   white-space: nowrap;
@@ -869,6 +869,16 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
    Reines Neuzeichnen (z. B. nach dem Speichern) bleibt still, sonst zappelt
    die Liste bei jeder Kleinigkeit. Darum trägt der Tabwechsel die Klasse
    .tab-in nur kurz und nimmt sie danach wieder ab. */
+
+/* Zwei Dauern, zwei Kurven – ersetzen die frueher fuenf verschiedenen
+   Tap-Werte und drei fast identischen Bounce-Kurven. Neue Bewegung greift
+   hier zu, statt sich eigene Zahlen auszudenken. */
+:root {
+  --dur-tap: 0.12s;
+  --dur-pop: 0.3s;
+  --ease-standard: ease;
+  --ease-bounce: cubic-bezier(0.2, 1.4, 0.4, 1);
+}
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes riseIn {
@@ -896,23 +906,23 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 
 /* Antippbare Flächen geben nach */
 .card, .project-card, .note-card, .todo-row, .agenda-row, .tag-row, .chip, .stat {
-  transition: transform 0.14s ease, border-color 0.2s ease, background 0.2s ease;
+  transition: transform var(--dur-tap) var(--ease-standard), border-color 0.2s ease, background 0.2s ease;
 }
 .project-card:active, .note-card:active, .agenda-row:active, .tag-row:active { transform: scale(0.985); }
 .chip:active { transform: scale(0.94); }
-.fab { transition: transform 0.16s cubic-bezier(0.2, 1.4, 0.4, 1), box-shadow 0.2s; }
+.fab { transition: transform var(--dur-tap) var(--ease-bounce), box-shadow 0.2s; }
 .fab:active { transform: scale(0.9); }
 .fab:hover { box-shadow: 0 8px 26px rgba(212, 175, 55, 0.5); }
 /* Der Knopf taucht beim Tabwechsel neu auf (display) – dann spielt das ab.
    Bewusst ohne opacity: bleibt die Animation je hängen (gedrosselter Tab),
    ist der Knopf höchstens klein, aber nie unsichtbar. */
 @keyframes fabIn { from { transform: scale(0.5); } to { transform: scale(1); } }
-.fab { animation: fabIn 0.28s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.fab { animation: fabIn var(--dur-pop) var(--ease-bounce); }
 
 /* Abhaken: Häkchen schnappt rein, ein goldener Ring läuft aus.
    Nur bei der Handlung selbst (.just), nicht bei jedem Neuzeichnen. */
 .todo-check { transition: background 0.2s ease, border-color 0.2s ease; }
-.todo-check.checked.just::after { animation: popIn 0.32s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.todo-check.checked.just::after { animation: popIn var(--dur-pop) var(--ease-bounce); }
 .todo-check.checked.just::before {
   content: "";
   position: absolute;
@@ -922,8 +932,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   animation: ringPulse 0.5s ease-out forwards;
   pointer-events: none;
 }
-.todo-row { transition: opacity 0.25s ease; }
-.todo-row.done .todo-title { transition: opacity 0.25s ease; }
+/* Ein eben abgehaktes To-Do setzt sich weich an seine neue Stelle, statt hart
+   dorthin zu springen. Die frueheren opacity-Uebergaenge an dieser Stelle
+   konnten nie feuern: renderTodos() baut die Liste komplett per innerHTML neu
+   auf, es gibt also keinen bestehenden Knoten, der den Zustand wechselt. */
+.todo-row.eben-bewegt { animation: riseIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
 
 /* Wer Bewegung im System abgeschaltet hat, bekommt hier auch keine */
 @media (prefers-reduced-motion: reduce) {

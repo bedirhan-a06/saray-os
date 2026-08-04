@@ -973,6 +973,7 @@ function agendaChip(dateStr, datum) {
 }
 
 function renderAgenda() {
+  stilleZeichnung();
   const box = $("agenda-container");
   if (!box) return;
   const items = agendaItems();
@@ -1094,6 +1095,7 @@ function cardHTML(s, archivedView) {
 }
 
 function renderCards() {
+  stilleZeichnung();
   const container = $("cards-container");
   let list = sortSubs(activeSubs());
   if (activeCat !== "Alle") list = list.filter((s) => s.category === activeCat);
@@ -1344,7 +1346,7 @@ function todoRowHTML(t) {
   const metaParts = [esc(t.due_date ? `${fmtDate(new Date(t.due_date + "T00:00:00"))} · ${badge[1]}` : "ohne Termin")];
   if (zu) metaParts.push(esc(zu));
   return `
-  <div class="todo-row ${t.completed ? "done" : ""}" data-id="${t.id}">
+  <div class="todo-row ${t.completed ? "done" : ""}${t.id === ebenAbgehakt ? " eben-bewegt" : ""}" data-id="${t.id}">
     <button class="todo-check ${t.completed ? "checked" : ""}${t.id === ebenAbgehakt ? " just" : ""}" aria-label="Erledigt"></button>
     <div class="todo-body">
       <div class="todo-title">${tagTextHTML(t.title)}</div>
@@ -1365,6 +1367,7 @@ function sortTodos(list) {
 }
 
 function renderTodos() {
+  stilleZeichnung();
   const container = $("todos-container");
   if (!container) return;
   // Erledigte bleiben nur bis Tagesende sichtbar (Bestätigung fürs Abhaken),
@@ -1518,6 +1521,7 @@ function noteCardHTML(n) {
 }
 
 function renderNotes() {
+  stilleZeichnung();
   const container = $("notes-container");
   if (!container) return;
   let list = [...notes].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -1673,6 +1677,7 @@ function projectCardHTML(p) {
 }
 
 function renderProjects() {
+  stilleZeichnung();
   const container = $("projects-container");
   if (!container) return;
   let list = sortProjects(projects);
@@ -2014,6 +2019,16 @@ function zeigeTabAn(sec) {
   void sec.offsetWidth;   // Neustart erzwingen, falls derselbe Tab erneut kommt
   sec.classList.add("tab-in");
   tabAnimTimer = setTimeout(() => sec.classList.remove("tab-in"), 700);
+}
+
+// Solange .tab-in auf einem Abschnitt sitzt (bis zu 700 ms), bekaeme JEDE frisch
+// eingefuegte Listenzeile die gestaffelte Eintritts-Animation ab – auch wenn nur
+// ein To-Do abgehakt oder ein Filter-Chip getippt wurde. Dann tanzte die ganze
+// Liste erneut durch, statt nur das geaenderte Element. Wer eine Liste neu
+// aufbaut, raeumt die Klasse daher vorher weg.
+function stilleZeichnung() {
+  clearTimeout(tabAnimTimer);
+  document.querySelectorAll(".tab-in").forEach((el) => el.classList.remove("tab-in"));
 }
 
 /* ================= KALENDER-EXPORT ================= */
