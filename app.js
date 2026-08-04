@@ -756,7 +756,7 @@ function renderAll() {
   renderBudget();
   renderOverdue();
   renderSavingsHint();
-  renderAgenda();
+  renderAgendaAnsicht();
   renderCatFilter();
   renderCards();
   renderArchive();
@@ -972,63 +972,60 @@ function agendaChip(dateStr, datum) {
   return `<div class="next ${ton}">${text}</div>`;
 }
 
-function renderAgenda() {
-  stilleZeichnung();
-  const box = $("agenda-container");
-  if (!box) return;
-  const items = agendaItems();
-  if (!items.length) {
-    box.innerHTML = leerHTML(`In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig.`);
-    return;
-  }
-  box.innerHTML = items.map((it) => {
-    if (it.art === "abo") {
-      return `
-      <div class="agenda-row" data-art="abo" data-id="${it.s.id}">
-        ${iconHTML(it.s)}
-        <div class="agenda-body">
-          <div class="agenda-title">${esc(it.s.name)}</div>
-          <div class="agenda-meta">Abo · ${fmt(bruttoPreis(it.s))}</div>
-        </div>
-        ${agendaChip(it.s.next_payment, it.datum)}
-      </div>`;
-    }
-    if (it.art === "projekt") {
-      return `
-      <div class="agenda-row" data-art="projekt" data-id="${it.p.id}">
-        <div class="icon">${svgIcon("folder")}</div>
-        <div class="agenda-body">
-          <div class="agenda-title">${esc(it.p.name)}</div>
-          <div class="agenda-meta">Projekt · ${esc(it.p.status)}</div>
-        </div>
-        ${agendaChip(it.p.due_date, it.datum)}
-      </div>`;
-    }
-    if (it.art === "google") {
-      return `
-      <div class="agenda-row" data-art="google" data-id="${esc(it.g.uid)}">
-        <div class="icon">${svgIcon("calendar")}</div>
-        <div class="agenda-body">
-          <div class="agenda-title">${esc(it.g.title)}</div>
-          <div class="agenda-meta">Kalender${it.g.time ? ` · ${esc(it.g.time)} Uhr` : ""}</div>
-        </div>
-        ${agendaChip(it.g.date, it.datum)}
-      </div>`;
-    }
-    const zu = todoParentName(it.t);
+// Eine Agenda-Zeile. Liste und Monatsansicht teilen sich dieselbe Darstellung
+// und dieselben Klick-Ziele – darum als eigene Funktion statt doppelt gebaut.
+function agendaRowHTML(it) {
+  if (it.art === "abo") {
     return `
-    <div class="agenda-row" data-art="todo" data-id="${it.t.id}">
-      <button class="todo-check" aria-label="Erledigt"></button>
+    <div class="agenda-row" data-art="abo" data-id="${it.s.id}">
+      ${iconHTML(it.s)}
       <div class="agenda-body">
-        <div class="agenda-title">${tagTextHTML(it.t.title)}</div>
-        <div class="agenda-meta">To-Do${zu ? " · " + esc(zu) : ""}</div>
+        <div class="agenda-title">${esc(it.s.name)}</div>
+        <div class="agenda-meta">Abo · ${fmt(bruttoPreis(it.s))}</div>
       </div>
-      ${agendaChip(it.t.due_date, it.datum)}
+      ${agendaChip(it.s.next_payment, it.datum)}
     </div>`;
-  }).join("");
+  }
+  if (it.art === "projekt") {
+    return `
+    <div class="agenda-row" data-art="projekt" data-id="${it.p.id}">
+      <div class="icon">${svgIcon("folder")}</div>
+      <div class="agenda-body">
+        <div class="agenda-title">${esc(it.p.name)}</div>
+        <div class="agenda-meta">Projekt · ${esc(it.p.status)}</div>
+      </div>
+      ${agendaChip(it.p.due_date, it.datum)}
+    </div>`;
+  }
+  if (it.art === "google") {
+    return `
+    <div class="agenda-row" data-art="google" data-id="${esc(it.g.uid)}">
+      <div class="icon">${svgIcon("calendar")}</div>
+      <div class="agenda-body">
+        <div class="agenda-title">${esc(it.g.title)}</div>
+        <div class="agenda-meta">Kalender${it.g.time ? ` · ${esc(it.g.time)} Uhr` : ""}</div>
+      </div>
+      ${agendaChip(it.g.date, it.datum)}
+    </div>`;
+  }
+  const zu = todoParentName(it.t);
+  return `
+  <div class="agenda-row" data-art="todo" data-id="${it.t.id}">
+    <button class="todo-check" aria-label="Erledigt"></button>
+    <div class="agenda-body">
+      <div class="agenda-title">${tagTextHTML(it.t.title)}</div>
+      <div class="agenda-meta">To-Do${zu ? " · " + esc(zu) : ""}</div>
+    </div>
+    ${agendaChip(it.t.due_date, it.datum)}
+  </div>`;
+}
+
+function bindAgendaRowClicks(box) {
   box.querySelectorAll(".agenda-row").forEach((el) => {
     const id = el.dataset.id;
     if (el.dataset.art === "todo") {
+      // Beim To-Do haengen zwei getrennte Ziele dran: Haekchen abhaken,
+      // Textbereich oeffnet das Modal. Nicht die ganze Zeile wie sonst.
       el.querySelector(".todo-check").addEventListener("click", (e) => { e.stopPropagation(); toggleTodo(id); });
       el.querySelector(".agenda-body").addEventListener("click", () => openTodoModal(id));
     } else if (el.dataset.art === "projekt") {
@@ -1041,6 +1038,151 @@ function renderAgenda() {
     // auf die generische Kalenderansicht wäre mehr Verwirrung als Nutzen.
   });
 }
+
+function renderAgenda() {
+  stilleZeichnung();
+  const box = $("agenda-container");
+  if (!box) return;
+  const items = agendaItems();
+  if (!items.length) {
+    box.innerHTML = leerHTML(`In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig.`);
+    return;
+  }
+  box.innerHTML = items.map(agendaRowHTML).join("");
+  bindAgendaRowClicks(box);
+}
+
+/* ---- Monatsansicht ----
+   Dieselben vier Quellen wie die Liste, nur als Kalenderblatt. */
+
+// Immer 42 Tage (6 Wochen): fuehrende und nachfolgende Tage der Nachbarmonate
+// fuellen das Gitter auf, damit die Wochentag-Spalten nie verrutschen und es
+// keine Fallunterscheidung 5-vs-6-Wochen braucht.
+function monatsTage(jahr, monat) {
+  const erster = new Date(jahr, monat, 1);
+  const wochentag = (erster.getDay() + 6) % 7;   // Mo=0 … So=6, nicht JS-Standard So=0
+  const start = new Date(jahr, monat, 1 - wochentag);
+  return Array.from({ length: 42 }, (_, i) =>
+    new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+}
+
+// Wie agendaItems(), aber ohne 7-Tage-Grenze und ohne das Ausblenden
+// überfälliger Abos: die Liste blendet die aus, weil sie oben im roten Panel
+// stehen – ein Kalenderblatt soll den Tag dagegen ehrlich zeigen.
+function agendaItemsImZeitraum(von, bis) {
+  const items = [];
+  const imFenster = (d) => d >= von && d <= bis;
+  activeSubs().forEach((s) => {
+    const d = new Date(s.next_payment + "T00:00:00");
+    if (imFenster(d)) items.push({ art: "abo", datum: d, s });
+  });
+  todos.forEach((t) => {
+    if (t.completed || !t.due_date) return;
+    const d = new Date(t.due_date + "T00:00:00");
+    if (imFenster(d)) items.push({ art: "todo", datum: d, t });
+  });
+  projects.forEach((p) => {
+    if (p.status === "fertig" || !p.due_date) return;
+    const d = new Date(p.due_date + "T00:00:00");
+    if (imFenster(d)) items.push({ art: "projekt", datum: d, p });
+  });
+  googleEvents.forEach((g) => {
+    const d = new Date(g.date + "T00:00:00");
+    if (imFenster(d)) items.push({ art: "google", datum: d, g });
+  });
+  return items.sort((a, b) => a.datum - b.datum);
+}
+
+let monatsAnker = null;        // 1. des angezeigten Monats
+let monatsAktiverTag = null;   // "YYYY-MM-DD" oder null
+let monatsNachTag = {};        // Termine gruppiert, fuer die Detailliste
+
+function monatWechseln(delta) {
+  monatsAnker = new Date(monatsAnker.getFullYear(), monatsAnker.getMonth() + delta, 1);
+  monatsAktiverTag = null;
+  renderMonatsansicht(true);
+}
+
+function renderMonatsansicht(mitEinzug) {
+  const box = $("monat-container");
+  if (!box) return;
+  if (!monatsAnker) {
+    const h = todayMidnight();
+    monatsAnker = new Date(h.getFullYear(), h.getMonth(), 1);
+  }
+  const jahr = monatsAnker.getFullYear(), monat = monatsAnker.getMonth();
+  const tage = monatsTage(jahr, monat);
+  const items = agendaItemsImZeitraum(tage[0], tage[41]);
+  monatsNachTag = {};
+  items.forEach((it) => (monatsNachTag[toDateStr(it.datum)] ||= []).push(it));
+  const heuteStr = toDateStr(todayMidnight());
+
+  box.innerHTML = `
+    <div class="monat-nav">
+      <button id="monat-zurueck" aria-label="Vorheriger Monat">${svgIcon("chevron-left")}</button>
+      <span class="monat-titel">${monatsAnker.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</span>
+      <button id="monat-vor" aria-label="Nächster Monat">${svgIcon("chevron-right")}</button>
+    </div>
+    <div class="monat-wochentage">${["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((w) => `<span>${w}</span>`).join("")}</div>
+    <div class="monat-grid${mitEinzug ? " wechsel" : ""}">
+      ${tage.map((d) => {
+        const ds = toDateStr(d);
+        const anzahl = (monatsNachTag[ds] || []).length;
+        const punkte = !anzahl ? "" : `<div class="punkt-reihe">${
+          anzahl <= 3
+            ? Array.from({ length: anzahl }, () => `<span class="punkt"></span>`).join("")
+            : `<span class="punkt mehr">+${anzahl}</span>`
+        }</div>`;
+        return `<button class="monat-tag${d.getMonth() !== monat ? " ausserhalb" : ""}${ds === heuteStr ? " heute" : ""}${ds === monatsAktiverTag ? " aktiv" : ""}" data-datum="${ds}">
+          <span>${d.getDate()}</span>${punkte}
+        </button>`;
+      }).join("")}
+    </div>
+    <div class="monat-tag-details" id="monat-tag-details"></div>`;
+
+  $("monat-zurueck").addEventListener("click", () => monatWechseln(-1));
+  $("monat-vor").addEventListener("click", () => monatWechseln(1));
+  box.querySelectorAll(".monat-tag").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      // Nur Klassen umschalten und die Detailliste erneuern – nicht das ganze
+      // Gitter neu zeichnen, sonst spielt der Einzug bei jedem Tipp erneut.
+      box.querySelectorAll(".monat-tag.aktiv").forEach((el) => el.classList.remove("aktiv"));
+      monatsAktiverTag = monatsAktiverTag === btn.dataset.datum ? null : btn.dataset.datum;
+      if (monatsAktiverTag) btn.classList.add("aktiv");
+      renderMonatTagDetails();
+    });
+  });
+  renderMonatTagDetails();
+}
+
+function renderMonatTagDetails() {
+  const el = $("monat-tag-details");
+  if (!el) return;
+  if (!monatsAktiverTag) { el.innerHTML = ""; return; }
+  const items = monatsNachTag[monatsAktiverTag] || [];
+  el.innerHTML = items.length ? items.map(agendaRowHTML).join("") : leerHTML("An diesem Tag ist nichts.");
+  bindAgendaRowClicks(el);
+}
+
+/* ---- Umschalter Liste / Monat ---- */
+let agendaAnsicht = "liste";
+
+function renderAgendaAnsicht() {
+  const liste = agendaAnsicht === "liste";
+  $("agenda-view-toggle").querySelectorAll(".chip")
+    .forEach((b) => b.classList.toggle("active", b.dataset.view === agendaAnsicht));
+  $("agenda-titel").textContent = liste ? `Nächste ${AGENDA_TAGE} Tage` : "Monat";
+  $("agenda-container").classList.toggle("hidden", !liste);
+  $("monat-container").classList.toggle("hidden", liste);
+  liste ? renderAgenda() : renderMonatsansicht(false);
+}
+
+$("agenda-view-toggle").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip");
+  if (!b || b.dataset.view === agendaAnsicht) return;
+  agendaAnsicht = b.dataset.view;
+  renderAgendaAnsicht();
+});
 
 function renderCatFilter() {
   const row = $("cat-filter");

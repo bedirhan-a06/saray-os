@@ -49,6 +49,12 @@
     <rect x="3.4" y="5.4" width="17.2" height="15.2" rx="2.6"/><path d="M3.4 10h17.2"/>
     <path d="M8.4 3.4v4"/><path d="M15.6 3.4v4"/>
   </symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.5 5.5 8 12l6.5 6.5"/>
+  </symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9.5 5.5 16 12l-6.5 6.5"/>
+  </symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <path d="M12 5.5v13"/><path d="M5.5 12h13"/>
   </symbol>
@@ -194,8 +200,13 @@
     <div id="overdue-banner" class="overdue-panel hidden"></div>
     <div id="savings-banner" class="hint-banner hidden"></div>
 
-    <div class="section-head"><h2>Nächste 7 Tage</h2><span class="head-date" id="agenda-date"></span></div>
+    <div class="section-head"><h2 id="agenda-titel">Nächste 7 Tage</h2><span class="head-date" id="agenda-date"></span></div>
+    <div class="chip-row" id="agenda-view-toggle">
+      <button class="chip active" data-view="liste">Liste</button>
+      <button class="chip" data-view="monat">Monat</button>
+    </div>
     <div class="agenda list" id="agenda-container"></div>
+    <div class="monat hidden" id="monat-container"></div>
   </section>
 
   <!-- ===== Tab: Projekte ===== -->

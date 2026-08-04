@@ -544,6 +544,59 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .tag-dim { color: var(--text-dim); font-size: 12px; }
 
 /* ---------- Agenda (Übersicht) ---------- */
+/* ---------- Monatsansicht ---------- */
+.monat-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.monat-nav button {
+  padding: 7px 10px;
+  border-radius: 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  display: flex;
+  transition: transform var(--dur-tap) var(--ease-standard), background 0.2s ease;
+}
+.monat-nav button:active { transform: scale(0.92); }
+.monat-nav .monat-titel { font-weight: 650; font-size: 15px; }
+.monat-wochentage { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 6px; }
+.monat-wochentage span {
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Der Einzug spielt nur beim Monatswechsel, nicht bei jedem Tag-Tipp –
+   sonst tanzt das ganze Gitter bei einer reinen Auswahl durch.
+   Bewusst ohne opacity und ohne Fuellmodus, wie beim FAB: bleibt die Animation
+   je haengen (gedrosselter Tab, App im Hintergrund), ist das Blatt hoechstens
+   leicht verschoben – aber nie unsichtbar. */
+@keyframes monatEin { from { transform: translateY(8px); } to { transform: none; } }
+.monat-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.monat-grid.wechsel { animation: monatEin 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+.monat-tag {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform var(--dur-tap) var(--ease-standard), background 0.2s ease, border-color 0.2s ease;
+}
+.monat-tag:active { transform: scale(0.92); }
+.monat-tag.ausserhalb { opacity: 0.3; }
+.monat-tag.heute { border-color: var(--gold-2); color: var(--gold-2); }
+.monat-tag.aktiv { background: var(--gold-grad); color: #14110a; border-color: transparent; }
+.monat-tag .punkt-reihe { display: flex; align-items: center; gap: 2px; height: 5px; }
+.monat-tag .punkt { width: 4px; height: 4px; border-radius: 50%; background: var(--gold-2); }
+.monat-tag .punkt.mehr { width: auto; height: auto; border-radius: 0; background: none; font-size: 8.5px; color: var(--gold-2); }
+.monat-tag.aktiv .punkt { background: #14110a; }
+.monat-tag.aktiv .punkt.mehr { background: none; color: #14110a; }
+.monat-tag-details { margin-top: 14px; display: flex; flex-direction: column; gap: 9px; }
+
 .agenda { display: flex; flex-direction: column; gap: 9px; }
 .agenda-row {
   display: flex;
