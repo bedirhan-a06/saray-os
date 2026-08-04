@@ -2378,6 +2378,213 @@ async function maybeNotifyDue(force) {
   } catch (e) { console.warn(e); }
 }
 
+/* ================= SPRACHNOTIZ =================
+   Aufnehmen, mitschreiben lassen, einordnen – aber nie stillschweigend
+   speichern. Vor dem Schreiben kommt immer die Bestätigungskarte, sonst
+   landet ein Hörfehler unbemerkt in der Datenbank. */
+
+let aufnahmeRecorder = null;
+let aufnahmeStuecke = [];
+let aufnahmeTyp = "";
+let aufnahmeStart = null;
+let aufnahmeTimer = null;
+let sprachTyp = "note";
+let sprachDaten = null;
+
+function sprachnotizMoeglich() {
+  return !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+}
+
+async function starteAufnahme() {
+  if (aufnahmeRecorder) { beendeAufnahme(); return; }   // erneutes Antippen beendet
+  if (!sprachnotizMoeglich()) { showToast("Sprachnotizen gehen auf diesem Gerät nicht"); return; }
+
+  let strom;
+  try {
+    strom = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    showToast(err.name === "NotAllowedError" ? "Zugriff aufs Mikrofon abgelehnt" : "Mikrofon nicht verfügbar");
+    return;
+  }
+
+  // Vor iOS 18.4 kann Safari nur mp4/AAC, danach auch webm/Opus.
+  aufnahmeTyp = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"]
+    .find((t) => MediaRecorder.isTypeSupported(t)) || "";
+  aufnahmeRecorder = new MediaRecorder(strom, aufnahmeTyp ? { mimeType: aufnahmeTyp } : undefined);
+  aufnahmeStuecke = [];
+  aufnahmeRecorder.ondataavailable = (e) => { if (e.data.size > 0) aufnahmeStuecke.push(e.data); };
+  aufnahmeRecorder.onstop = () => {
+    strom.getTracks().forEach((t) => t.stop());
+    verarbeiteAufnahme();
+  };
+  aufnahmeRecorder.start();
+
+  aufnahmeStart = Date.now();
+  $("voice-btn").classList.add("laeuft");
+  $("voice-bar").classList.remove("hidden");
+  aufnahmeTimer = setInterval(zeichneAufnahmeZeit, 250);
+  zeichneAufnahmeZeit();
+}
+
+function zeichneAufnahmeZeit() {
+  const sek = Math.floor((Date.now() - aufnahmeStart) / 1000);
+  $("voice-timer").textContent = `${Math.floor(sek / 60)}:${String(sek % 60).padStart(2, "0")}`;
+}
+
+function raeumeAufnahmeAuf() {
+  clearInterval(aufnahmeTimer);
+  $("voice-btn").classList.remove("laeuft");
+  $("voice-bar").classList.add("hidden");
+}
+
+function beendeAufnahme() {
+  if (!aufnahmeRecorder) return;
+  aufnahmeRecorder.stop();       // onstop verarbeitet weiter
+  aufnahmeRecorder = null;
+  raeumeAufnahmeAuf();
+}
+
+function verwerfeAufnahme() {
+  if (aufnahmeRecorder) {
+    aufnahmeRecorder.onstop = null;   // nichts verarbeiten
+    aufnahmeRecorder.stream?.getTracks().forEach((t) => t.stop());
+    aufnahmeRecorder.stop();
+    aufnahmeRecorder = null;
+  }
+  aufnahmeStuecke = [];
+  raeumeAufnahmeAuf();
+}
+
+async function verarbeiteAufnahme() {
+  const blob = new Blob(aufnahmeStuecke, { type: aufnahmeTyp || "audio/mp4" });
+  aufnahmeStuecke = [];
+  // Bekannter iOS-Fehler: die Aufnahme bleibt manchmal leer. Lieber klar
+  // sagen, was zu tun ist, als still nichts passieren zu lassen.
+  if (blob.size < 800) { showToast("Aufnahme leer – manchmal hilft ein Neustart des iPhones"); return; }
+
+  showToast("Wird ausgewertet …");
+  const form = new FormData();
+  form.append("audio", blob, "aufnahme." + (aufnahmeTyp.includes("mp4") ? "m4a" : "webm"));
+  try {
+    const { data, error } = await db.functions.invoke("sprachnotiz", { body: form });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    if (!data || typeof data.text !== "string") throw new Error("Server war überlastet");
+    if (!data.text) { showToast("Nichts verstanden – nochmal versuchen"); return; }
+    oeffneSprachBestaetigung(data);
+  } catch (err) {
+    console.warn("Sprachnotiz:", err);
+    showToast("Sprachnotiz fehlgeschlagen: " + (err.message || err));
+  }
+}
+
+/* ---- Bestätigungskarte ---- */
+
+function oeffneSprachBestaetigung(daten) {
+  sprachDaten = daten;
+  // Bei "unclear" nicht raten – die Notiz ist die harmloseste Ablage
+  sprachTyp = ["todo", "note", "subscription", "project"].includes(daten.type) ? daten.type : "note";
+  $("voice-transkript").textContent = `„${daten.text}"`;
+  zeichneSprachTyp();
+  $("voice-overlay").classList.add("open");
+}
+
+function zeichneSprachTyp() {
+  $("voice-typ-row").querySelectorAll(".chip")
+    .forEach((b) => b.classList.toggle("active", b.dataset.typ === sprachTyp));
+  const el = $("voice-felder");
+  if (sprachTyp === "todo") {
+    el.innerHTML = `
+      <div class="field"><label>Titel</label>
+        <input type="text" id="voice-f-title" value="${esc(sprachDaten.title || sprachDaten.text)}"></div>
+      <div class="field"><label>Fällig (optional)</label>
+        <input type="date" id="voice-f-date" value="${sprachDaten.due_date || ""}"></div>`;
+  } else if (sprachTyp === "note") {
+    el.innerHTML = `
+      <div class="field"><label>Notiz</label>
+        <textarea id="voice-f-content" rows="4">${esc(sprachDaten.content || sprachDaten.text)}</textarea></div>`;
+  } else {
+    // Abo und Projekt haben Pflichtfelder, die aus einem Satz kaum sicher zu
+    // erraten sind – dafür öffnet sich das gewohnte Formular, vorausgefüllt.
+    el.innerHTML = `<div class="hint-text">Öffnet das ${sprachTyp === "subscription" ? "Abo" : "Projekt"}-Formular, schon ausgefüllt.</div>`;
+  }
+}
+
+function schliesseSprachBestaetigung() {
+  $("voice-overlay").classList.remove("open");
+  sprachDaten = null;
+}
+
+async function speichereSprachnotiz() {
+  if (!sprachDaten) return;
+  const btn = $("voice-save-btn");
+  btn.disabled = true;
+  try {
+    if (sprachTyp === "todo") {
+      const titel = $("voice-f-title").value.trim();
+      if (!titel) { showToast("Bitte einen Titel eingeben"); return; }
+      const { error } = await db.from("todos").insert({
+        user_id: user.id, title: titel, due_date: $("voice-f-date").value || null
+      });
+      if (error) throw error;
+      schliesseSprachBestaetigung();
+      await loadTodos();
+      renderAll();
+      showToast("To-Do gespeichert");
+
+    } else if (sprachTyp === "note") {
+      const inhalt = $("voice-f-content").value.trim();
+      if (!inhalt) { showToast("Notiz ist leer"); return; }
+      const { error } = await db.from("notes").insert({ user_id: user.id, content: inhalt });
+      if (error) throw error;
+      schliesseSprachBestaetigung();
+      await loadNotes();
+      renderAll();
+      showToast("Notiz gespeichert");
+
+    } else if (sprachTyp === "subscription") {
+      const d = sprachDaten;
+      schliesseSprachBestaetigung();
+      openModal(null);
+      $("f-name").value = d.name || "";
+      if (d.price != null) $("f-price").value = d.price;
+      // next_payment darf in der Datenbank nicht leer sein – heute als Platzhalter,
+      // im Formular sieht Bedo es und korrigiert es bei Bedarf.
+      $("f-next").value = d.next_payment || toDateStr(todayMidnight());
+      if ([1, 3, 6, 12].includes(d.cycle_months)) $("f-cycle").value = String(d.cycle_months);
+      if (d.category) $("f-category").value = d.category;
+      refreshPreview();
+      refreshVatHint();
+
+    } else if (sprachTyp === "project") {
+      const d = sprachDaten;
+      schliesseSprachBestaetigung();
+      openProjectModal(null);
+      $("project-f-name").value = d.name || "";
+      if (d.kind) $("project-f-kind").value = d.kind;
+      if (d.due_date) $("project-f-date").value = d.due_date;
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("voice-btn").addEventListener("click", starteAufnahme);
+$("voice-stop-btn").addEventListener("click", beendeAufnahme);
+$("voice-cancel-rec-btn").addEventListener("click", verwerfeAufnahme);
+$("voice-save-btn").addEventListener("click", speichereSprachnotiz);
+$("voice-cancel-btn").addEventListener("click", schliesseSprachBestaetigung);
+$("voice-overlay").addEventListener("click", (e) => { if (e.target.id === "voice-overlay") schliesseSprachBestaetigung(); });
+$("voice-typ-row").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip");
+  if (!b || b.dataset.typ === sprachTyp) return;
+  sprachTyp = b.dataset.typ;
+  zeichneSprachTyp();
+});
+
 /* ================= SERVICE WORKER ================= */
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});

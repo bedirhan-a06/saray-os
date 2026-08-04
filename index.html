@@ -49,6 +49,10 @@
     <rect x="3.4" y="5.4" width="17.2" height="15.2" rx="2.6"/><path d="M3.4 10h17.2"/>
     <path d="M8.4 3.4v4"/><path d="M15.6 3.4v4"/>
   </symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="3" width="6" height="11" rx="3"/>
+    <path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5v3.5"/><path d="M8.5 21h7"/>
+  </symbol>
   <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M14.5 5.5 8 12l6.5 6.5"/>
   </symbol>
@@ -165,7 +169,10 @@
         <div class="date" id="today-label"></div>
       </div>
     </div>
-    <button class="btn subtle icon-btn" id="notif-btn" title="Erinnerungen aktivieren" aria-label="Erinnerungen aktivieren"><svg class="ic" viewBox="0 0 24 24"><use href="#i-bell"/></svg></button>
+    <div class="header-actions">
+      <button class="btn subtle icon-btn" id="voice-btn" title="Sprachnotiz aufnehmen" aria-label="Sprachnotiz aufnehmen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-mic"/></svg></button>
+      <button class="btn subtle icon-btn" id="notif-btn" title="Erinnerungen aktivieren" aria-label="Erinnerungen aktivieren"><svg class="ic" viewBox="0 0 24 24"><use href="#i-bell"/></svg></button>
+    </div>
   </header>
 
   <!-- ===== Tab: Übersicht ===== -->
@@ -659,6 +666,33 @@
     <div class="modal-actions">
       <button class="btn" id="mail-cancel">Abbrechen</button>
       <button class="btn gold" id="mail-save">Ändern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Läuft während der Aufnahme, schwebt über dem Inhalt wie der Toast -->
+<div class="voice-bar hidden" id="voice-bar">
+  <span class="voice-dot"></span>
+  <span id="voice-timer">0:00</span>
+  <button class="btn subtle icon-btn" id="voice-stop-btn" title="Fertig" aria-label="Aufnahme beenden"><svg class="ic" viewBox="0 0 24 24"><use href="#i-check"/></svg></button>
+  <button class="btn subtle icon-btn" id="voice-cancel-rec-btn" title="Verwerfen" aria-label="Aufnahme verwerfen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
+</div>
+
+<!-- Bestätigung vor dem Speichern: fängt Hör- und Verständnisfehler ab -->
+<div class="overlay" id="voice-overlay">
+  <div class="modal">
+    <h2>Sprachnotiz</h2>
+    <div class="hint-text" id="voice-transkript"></div>
+    <div class="chip-row" id="voice-typ-row">
+      <button class="chip" data-typ="todo">To-Do</button>
+      <button class="chip" data-typ="note">Notiz</button>
+      <button class="chip" data-typ="subscription">Abo</button>
+      <button class="chip" data-typ="project">Projekt</button>
+    </div>
+    <div id="voice-felder"></div>
+    <div class="modal-actions">
+      <button class="btn" id="voice-cancel-btn">Verwerfen</button>
+      <button class="btn gold" id="voice-save-btn">Speichern</button>
     </div>
   </div>
 </div>

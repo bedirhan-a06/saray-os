@@ -88,3 +88,53 @@ die App ruft beim Start ab und hält das Ergebnis 15 Minuten im Client-Cache.
 3. Statusfelder in `google_calendar_feeds` (`last_status`, `last_error`) zeigen
    das Ergebnis des letzten Abrufs.
 4. Logs: Supabase Dashboard → Edge Functions → `google-calendar`.
+
+## Sprachnotiz
+
+Aufnehmen, mitschreiben lassen, einordnen – und erst nach Bestätigung
+speichern. Der Mikrofon-Knopf sitzt oben neben der Glocke.
+
+### Bestandteile
+
+| Wo | Was |
+| --- | --- |
+| `functions/sprachnotiz/index.ts` | Edge Function: Transkription + Einordnung in einem Aufruf |
+| Vault `openai_api_key` | OpenAI-Schlüssel, nur über `openai_key_get()` lesbar |
+
+### Ablauf
+
+Der Browser nimmt per `MediaRecorder` auf und schickt den Ton an die Function.
+Dort läuft er durch `gpt-4o-mini-transcribe`, der Text danach durch
+`gpt-4o-mini` mit festem JSON-Schema, das ihn einem Baustein zuordnet
+(To-Do, Notiz, Abo, Projekt – oder `unclear`, wenn unsicher). Das heutige
+Datum steht im Prompt, damit „morgen" richtig gerechnet wird. Das Audio wird
+nirgends gespeichert, nur durchgereicht.
+
+To-Do und Notiz speichert die Bestätigungskarte direkt. Abo und Projekt haben
+Pflichtfelder, die aus einem Satz kaum sicher zu erraten sind – dort öffnet
+sich stattdessen das gewohnte Formular, schon ausgefüllt.
+
+### Warum nachgeputzt wird
+
+`saubereFelder()` prüft jeden Wert, bevor er zurückgeht. Grund: das Modell
+hängt gelegentlich Zeichen an einen Wert an (beobachtet: `2026-08-05}]}  {`).
+Was in eine typisierte Spalte läuft, wird deshalb geprüft statt blind
+durchgereicht.
+
+### Schlüssel austauschen
+
+```sql
+select vault.update_secret(
+  (select id from vault.secrets where name = 'openai_api_key'),
+  'sk-…neuer-schluessel…'
+);
+```
+Danach die Function einmal neu deployen – sie hält den Schlüssel im Speicher.
+
+### Wenn nichts ankommt
+
+1. „Aufnahme leer": bekannter iOS-Fehler in installierten Web-Apps, hilft oft
+   nur ein Neustart des iPhones.
+2. „Server war überlastet": Edge Function lief ins Ressourcenlimit, meist bei
+   mehreren Aufnahmen kurz hintereinander. Nochmal versuchen.
+3. Logs: Supabase Dashboard → Edge Functions → `sprachnotiz`.
