@@ -846,8 +846,7 @@ function activeSubs() { return subs.filter((s) => !s.archived); }
 function renderAll() {
   renderBegruessung();
   renderSummary();
-  renderEinnahmen();
-  renderBudget();
+  renderGeld();
   renderOverdue();
   renderSavingsHint();
   renderAgendaAnsicht();
@@ -894,6 +893,65 @@ function renderSummary() {
   $("yearly-total").textContent = fmt(monthly * 12);
   $("open-todo-count").textContent = todos.filter((t) => !t.completed).length;
 }
+
+/* ---- Geld in einer Zeile ----
+   Einnahmen und Budget waren zwei dauerhaft offene Panels und brauchten
+   zusammen mehr Platz als die Agenda, für die der Tab eigentlich da ist.
+   Jetzt steht oben eine Zeile mit den zwei Zahlen, die täglich zählen –
+   der Rest kommt auf Tippen. */
+const GELD_OFFEN_SCHLUESSEL = "saray.geld-offen";
+// Ab hier gilt eine Rechnung als überfällig – dieselbe Frist, mit der auch der
+// tägliche Rundlauf erinnert (RECHNUNG_FRIST_TAGE in functions/push).
+const RECHNUNG_MAHNUNG_TAGE = 14;
+
+function geldZusammenfassung() {
+  const teile = [];
+  const monatlich = activeSubs().reduce((sum, s) => sum + ownShareMonthly(s), 0);
+  const budget = Number(profile?.monthly_budget);
+  if (monatlich > 0 || budget > 0) {
+    const drueber = budget > 0 && monatlich > budget;
+    teile.push(`<span class="geld-teil${drueber ? " ueber" : ""}">Abos ${esc(fmt(monatlich))}${
+      budget > 0 ? ` von ${esc(fmt(budget))}` : " / M"}</span>`);
+  }
+  // Von den Websaray-Zahlen nur die eine, die gerade etwas von einem will:
+  // offene Rechnung vor eingegangenem Geld vor blosser Aussicht.
+  const z = einnahmenZahlen();
+  if (z.offen > 0) {
+    const alt = z.aeltesteRechnung >= RECHNUNG_MAHNUNG_TAGE;
+    teile.push(`<span class="geld-teil${alt ? " alt" : " offen"}">Websaray ${esc(fmt(z.offen))} offen</span>`);
+  } else if (z.eingegangen > 0) {
+    teile.push(`<span class="geld-teil ein">Websaray ${esc(fmt(z.eingegangen))} diesen Monat</span>`);
+  } else if (z.aussicht > 0) {
+    teile.push(`<span class="geld-teil">Websaray ${esc(fmt(z.aussicht))} in Aussicht</span>`);
+  }
+  return teile.join("");
+}
+
+function renderGeld() {
+  const panel = $("geld-panel");
+  if (!panel) return;
+  const zusammen = geldZusammenfassung();
+  panel.classList.toggle("hidden", !zusammen);
+  // Die Details immer mitzeichnen: sonst stünden beim Aufklappen alte Zahlen da
+  renderEinnahmen();
+  renderBudget();
+  if (!zusammen) return;
+  $("geld-zusammenfassung").innerHTML = zusammen;
+  geldAufklappen(localStorage.getItem(GELD_OFFEN_SCHLUESSEL) === "1", true);
+}
+
+function geldAufklappen(offen, stillOhneSpeichern) {
+  $("geld-detail").classList.toggle("hidden", !offen);
+  $("geld-kopf").setAttribute("aria-expanded", String(offen));
+  $("geld-panel").classList.toggle("offen", offen);
+  if (!stillOhneSpeichern) {
+    try { localStorage.setItem(GELD_OFFEN_SCHLUESSEL, offen ? "1" : "0"); } catch (_) { /* Privatmodus */ }
+  }
+}
+
+$("geld-kopf").addEventListener("click", () => {
+  geldAufklappen($("geld-detail").classList.contains("hidden"));
+});
 
 function renderBudget() {
   const bar = $("budget-bar");
@@ -1995,11 +2053,12 @@ function projectCardHTML(p) {
   // Link ohne Protokoll anzeigen – der Klick öffnet trotzdem die volle Adresse
   const linkText = (p.link || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
   const geld = geldZeile(p);
+  // Kein Status-Chip mehr auf der Karte: der Status steht seit der Gruppierung
+  // schon in der Überschrift darüber, ihn je Karte zu wiederholen ist Rauschen.
   return `
   <div class="project-card ${p.status === "fertig" ? "done" : ""}" data-id="${p.id}">
     <div class="project-top">
       <div class="project-name">${esc(p.name)}</div>
-      <span class="status-chip ${PROJECT_STATUS_CLASS[p.status] || "st-offen"}">${esc(p.status)}</span>
     </div>
     <div class="project-meta">${esc(metaParts.join(" · "))}</div>
     ${geld}
@@ -2008,17 +2067,30 @@ function projectCardHTML(p) {
   </div>`;
 }
 
+// Reihenfolge der Gruppen: was läuft, was ansteht, was hängt, was durch ist.
+const PROJEKT_GRUPPEN = ["in Arbeit", "offen", "wartet", "fertig"];
+
 function renderProjects() {
   stilleZeichnung();
   const container = $("projects-container");
   if (!container) return;
   let list = sortProjects(projects);
   if (activeProjectKind !== "Alle") list = list.filter((p) => p.kind === activeProjectKind);
-  container.innerHTML = list.length
-    ? list.map(projectCardHTML).join("")
-    : projectsFehler
+  if (!list.length) {
+    container.innerHTML = projectsFehler
       ? fehlerHTML("projekte")
       : leerHTML(`Noch keine Projekte${activeProjectKind !== "Alle" ? " dieser Art" : ""} – tipp unten rechts auf „+“.`);
+    return;
+  }
+  // Nach Status gruppieren statt flach auflisten: „was liegt gerade in Arbeit"
+  // ist die Frage, mit der man den Tab öffnet – die soll man nicht aus
+  // sechs einzelnen Chips zusammenlesen müssen.
+  container.innerHTML = PROJEKT_GRUPPEN.map((status) => {
+    const gruppe = list.filter((p) => p.status === status);
+    if (!gruppe.length) return "";
+    return `<div class="gruppen-kopf ${PROJECT_STATUS_CLASS[status] || ""}">${esc(status)}<span class="gruppen-zahl">${gruppe.length}</span></div>` +
+      gruppe.map(projectCardHTML).join("");
+  }).join("");
   container.querySelectorAll(".project-card").forEach((el) => {
     el.addEventListener("click", () => openProjectModal(el.dataset.id));
     // Der Link soll die Seite öffnen, nicht das Modal
@@ -2442,7 +2514,7 @@ function bindSettingsUI() {
   $("set-budget").onchange = (e) => {
     const v = e.target.value === "" ? null : Math.max(0, parseFloat(e.target.value));
     saveProfile({ monthly_budget: v });
-    renderBudget();
+    renderGeld();
   };
   zeichneGcalEinstellungen();
   $("set-gcal-save").onclick = async () => {

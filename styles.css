@@ -54,8 +54,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .card-actions .ic, .project-link .ic { width: 14px; height: 14px; }
 .hint-banner button .ic { width: 15px; height: 15px; }
 
-/* ---------- Serif-Wordmark ---------- */
-.serif { font-family: Georgia, "Times New Roman", serif; }
+/* ---------- Wortmarke ----------
+   Vorher Georgia – die generischste „elegante" Web-Serif, dieselbe, die jede
+   zweite Landingpage nutzt. Futura in gesperrten Versalien spricht dagegen die
+   Formensprache des Modul-Zeichens: Kreis und Rechteck, konstruiert statt
+   kalligrafisch. Alles Systemschriften, damit die App offline bleibt. */
+.marke {
+  font-family: Futura, "Avenir Next", "Century Gothic", system-ui, sans-serif;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
 .gold-text {
   background: var(--gold-grad);
   -webkit-background-clip: text;
@@ -84,7 +93,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 }
 .wordmark { text-align: center; margin-bottom: 26px; }
 .wordmark svg { display: block; margin: 0 auto 6px; }
-.wordmark h1 { font-size: 34px; font-weight: 700; letter-spacing: 0.5px; }
+.wordmark h1 { font-size: 25px; }
 .wordmark .takt { margin: 11px 0 8px; }
 .wordmark p { color: var(--text-dim); font-size: 13px; }
 .auth-card .field { margin-bottom: 14px; }
@@ -142,7 +151,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 }
 .lock-card { width: 100%; max-width: 320px; text-align: center; }
 .lock-card > svg { display: block; margin: 0 auto 8px; }
-.lock-card h1 { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
+.lock-card h1 { font-size: 20px; }
 .lock-card .takt { margin: 10px 0 6px; }
 .lock-hint { color: var(--text-dim); font-size: 13.5px; margin-top: 4px; min-height: 19px; }
 
@@ -223,7 +232,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 /* 44 px ist Apples Mindestmaß für Tap-Flächen – der Mikrofonknopf lag darunter */
 .app-header .header-actions .btn { min-width: 44px; min-height: 44px; padding: 0; }
 .app-header .wm { display: flex; align-items: center; gap: 10px; }
-.app-header .wm h1 { font-size: 22px; font-weight: 700; }
+.app-header .wm h1 { font-size: 16px; }
 .app-header .date { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
 
 /* ---------- Taktstrich ----------
@@ -278,9 +287,46 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 
 /* ---------- Budget ---------- */
 /* ---------- Einnahmen ---------- */
-/* Die Zahlen-Panels stehen jetzt UNTER der Agenda – der Abstand gehört daher
-   nach oben. Ist keins davon sichtbar, entsteht auch kein Leerraum. */
-.einnahmen, #budget-bar, #savings-banner { margin-top: 22px; margin-bottom: 0; }
+/* Die Zahlen stehen unter der Agenda – der Abstand gehört daher nach oben.
+   Ist nichts davon sichtbar, entsteht auch kein Leerraum. */
+#geld-panel, #savings-banner { margin-top: 22px; margin-bottom: 0; }
+
+/* ---------- Geld: eine Zeile, Details auf Tippen ---------- */
+.geld {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.22s ease;
+}
+.geld.offen { border-color: var(--border-gold); }
+.geld-kopf {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  text-align: left;
+}
+/* Untereinander statt nebeneinander: beide Zahlen zusammen passen auf 375 px
+   nie in eine Zeile, und ein Trennpunkt bliebe beim Umbruch am Zeilenende
+   hängen. Zwei kurze Zeilen lesen sich ohnehin schneller als eine lange. */
+.geld-zusammenfassung { display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; min-width: 0; }
+.geld-teil { color: var(--text); font-weight: 600; }
+.geld-teil.ueber { color: var(--danger); }
+.geld-teil.offen { color: var(--warn); }
+.geld-teil.alt { color: var(--danger); }
+.geld-teil.ein { color: var(--gold-2); }
+.geld-pfeil { color: var(--text-dim); transition: transform var(--dur-pop) var(--ease-standard); }
+.geld.offen .geld-pfeil { transform: rotate(180deg); }
+.geld-detail { padding: 0 16px 14px; }
+/* Im Ausklapp-Bereich tragen die beiden Bloecke keinen eigenen Rahmen mehr –
+   der Rahmen ist das Panel selbst. */
+.geld-detail .einnahmen,
+.geld-detail .budget-bar { background: none; border: none; border-radius: 0; padding: 0; }
+.geld-detail .einnahmen + .budget-bar { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border); }
+
 .einnahmen {
   background: var(--panel);
   border: 1px solid var(--border-gold);
@@ -561,6 +607,36 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
+/* Gruppen-Überschrift in der Projektliste. Traegt die Statusfarbe, damit die
+   Gliederung ohne Lesen erkennbar ist – der Chip auf den Karten faellt dafuer weg. */
+.gruppen-kopf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin: 12px 0 -2px;
+  color: var(--text-dim);
+  background: none;
+}
+.gruppen-kopf:first-child { margin-top: 0; }
+/* Die Zahl bewusst ohne Pille: „background: currentColor" haette hier die
+   Farbe DIESER Regel genommen, nicht die der Ueberschrift – also dunkel auf
+   dunkel. Ein schlichter Zaehler in Grau sagt ohnehin genug, die Statusfarbe
+   traegt schon das Wort daneben. */
+.gruppen-kopf .gruppen-zahl {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0;
+}
+.gruppen-kopf.st-offen  { color: var(--gold-2); }
+.gruppen-kopf.st-arbeit { color: #7c9eff; }
+.gruppen-kopf.st-wartet { color: var(--warn); }
+.gruppen-kopf.st-fertig { color: var(--ok); }
+
 .status-chip.st-offen  { background: rgba(212, 175, 55, 0.14);  color: var(--gold-2); }
 .status-chip.st-arbeit { background: rgba(124, 158, 255, 0.14); color: #7c9eff; }
 .status-chip.st-wartet { background: rgba(244, 184, 96, 0.14);  color: var(--warn); }
@@ -983,12 +1059,13 @@ mark {
   from { transform: translateY(32px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
-/* Serif auch in den Fenster-Überschriften – nimmt den Schriftzug auf und
-   macht aus jedem Dialog eine betitelte Tafel statt eines Formularkastens */
+/* Fenster-Überschriften bleiben in der Systemschrift: sie sind Bedienung,
+   keine Marke. Die Wortmarke in gesperrten Versalien wäre hier zu laut –
+   „PROJEKT BEARBEITEN" schreit einen Dialog an, statt ihn zu betiteln. */
 .modal h2 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 19px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   margin-bottom: 16px;
 }
 /* Für Modals mit Löschen-Button in der Kopfzeile, statt in modal-actions */

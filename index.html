@@ -82,6 +82,9 @@
   <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M9.5 5.5 16 12l-6.5 6.5"/>
   </symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5.5 9.5 12 16l6.5-6.5"/>
+  </symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <path d="M12 5.5v13"/><path d="M5.5 12h13"/>
   </symbol>
@@ -122,7 +125,7 @@
   <div class="auth-card">
     <div class="wordmark">
       <svg width="46" height="46" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mark"/></svg>
-      <h1 class="serif gold-text">Saray OS</h1>
+      <h1 class="marke gold-text">Saray OS</h1>
       <div class="takt" aria-hidden="true"><span></span><span></span><span></span></div>
       <p>Alles an einem Ort.</p>
     </div>
@@ -146,7 +149,7 @@
 <div id="lock-view" class="hidden">
   <div class="lock-card">
     <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mark"/></svg>
-    <h1 class="serif gold-text" id="lock-title">Saray OS</h1>
+    <h1 class="marke gold-text" id="lock-title">Saray OS</h1>
     <div class="takt" aria-hidden="true"><span></span><span></span><span></span></div>
     <div class="lock-hint" id="lock-hint">PIN eingeben</div>
     <div class="pin-dots" id="pin-dots"></div>
@@ -161,7 +164,7 @@
     <div class="wm">
       <svg width="26" height="26" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mark"/></svg>
       <div>
-        <h1 class="serif gold-text">Saray OS</h1>
+        <h1 class="marke gold-text">Saray OS</h1>
         <div class="date" id="today-label"></div>
       </div>
     </div>
@@ -206,15 +209,25 @@
     <div class="agenda list" id="agenda-container"></div>
     <div class="monat hidden" id="monat-container"></div>
 
-    <div class="einnahmen hidden" id="einnahmen-panel"></div>
-
-    <div class="budget-bar hidden" id="budget-bar">
-      <div class="row">
-        <span>Monatsbudget</span>
-        <span class="amount" id="budget-amount"></span>
+    <!-- Geld in einer Zeile, Details auf Wunsch. Vorher waren das zwei
+         dauerhaft offene Panels, die zusammen mehr Platz brauchten als die
+         Agenda darüber. -->
+    <div class="geld hidden" id="geld-panel">
+      <button class="geld-kopf" id="geld-kopf" aria-expanded="false" aria-controls="geld-detail">
+        <span class="geld-zusammenfassung" id="geld-zusammenfassung"></span>
+        <svg class="ic geld-pfeil" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </button>
+      <div class="geld-detail hidden" id="geld-detail">
+        <div class="einnahmen hidden" id="einnahmen-panel"></div>
+        <div class="budget-bar hidden" id="budget-bar">
+          <div class="row">
+            <span>Monatsbudget</span>
+            <span class="amount" id="budget-amount"></span>
+          </div>
+          <div class="budget-track"><div class="budget-fill" id="budget-fill"></div></div>
+          <div class="budget-hint hidden" id="budget-hint">Budget überschritten</div>
+        </div>
       </div>
-      <div class="budget-track"><div class="budget-fill" id="budget-fill"></div></div>
-      <div class="budget-hint hidden" id="budget-hint">Budget überschritten</div>
     </div>
 
     <div id="savings-banner" class="hint-banner hidden"></div>

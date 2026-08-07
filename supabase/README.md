@@ -107,6 +107,28 @@ werden beim Umstellen mit dem heutigen Tag vorbelegt. Wird der Stand
 zurückgesetzt, fallen sie wieder weg – sonst bliebe ein Bezahlt-Datum an einem
 Projekt stehen, das gar nicht mehr als bezahlt gilt.
 
+## Übersicht: Geld in einer Zeile
+
+Einnahmen und Budget waren zwei dauerhaft offene Panels und brauchten zusammen
+mehr Platz als die Agenda, für die der Tab eigentlich da ist. Jetzt steht dort
+eine Zeile mit den zwei Zahlen, die täglich zählen (`geldZusammenfassung()`);
+die Aufschlüsselung kommt auf Tippen und merkt sich ihren Zustand in
+`localStorage` unter `saray.geld-offen`.
+
+Von den Websaray-Zahlen zeigt die Zeile nur die eine, die gerade etwas will:
+offene Rechnung vor eingegangenem Geld vor bloßer Aussicht. Ist eine Rechnung
+länger als `RECHNUNG_MAHNUNG_TAGE` (14, dieselbe Frist wie im Push) draußen,
+färbt sich die Zeile rot statt gelb.
+
+Das Überfällig-Panel bleibt bewusst groß und oben: es verlangt eine Handlung
+(bezahlt/gekündigt), keine Kenntnisnahme.
+
+## Projekte nach Status
+
+Die Projektliste gruppiert nach Status (`PROJEKT_GRUPPEN`: in Arbeit → offen →
+wartet → fertig) statt flach zu listen. Der Status-Chip auf den Karten ist
+dafür weggefallen — er stünde sonst zweimal da.
+
 ## Suche
 
 Die Lupe in der Kopfzeile durchsucht Projekte, To-Dos, Abos, Notizen und die
