@@ -173,6 +173,23 @@ wird, was geladen ist. Gedacht als Ausweg, falls das Supabase-Projekt einmal
 nicht erreichbar ist; es ist **kein verschlüsseltes Backup**, die Datei liegt im
 Klartext (auch die Notizen, die in der App hinter dem PIN liegen).
 
+## Befehlsfeld und natürliches Eintragen
+
+Die Suche kann auch anlegen: `todo Rechnung morgen`, `notiz …`, `abo …`,
+`projekt …` (auch `kunde …`) zeigen eine Aktionszeile über den Treffern.
+Ohne Präfix stehen To-Do und Notiz als Angebot dabei. To-Do/Notiz speichern
+direkt beim Antippen, Abo/Projekt öffnen das Formular mit dem Namen
+vorausgefüllt. Nichts passiert ohne Antippen der Zeile.
+
+`datumAusText()` versteht Datumsangaben im Text — heute/morgen/übermorgen,
+Wochentage, „in N Tagen/Wochen", `15.8.` (nächstes Vorkommen) und
+`24.12.2026`. Bewusst **lokale Regeln statt KI-Aufruf**: kostet nichts und
+ist für Datumsangaben zuverlässiger als ein Modell. Die To-Do-Schnelleingabe
+zeigt live einen Chip mit dem verstandenen Datum; ein von Hand gewähltes
+Datum im Feld gewinnt immer. Uhrzeiten bleiben absichtlich im Titel stehen —
+To-Dos haben kein Zeitfeld, und ein stillschweigend verworfenes „14 Uhr"
+wäre gelogen.
+
 ## Assistent
 
 Eine zweite Tür in dieselbe App: fragen, was ansteht, oder sagen, was passieren

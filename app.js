@@ -1695,18 +1695,39 @@ function renderTodos() {
   });
 }
 
+// Live zeigen, was der Datums-Parser verstanden hat – Vertrauen entsteht,
+// wenn man VOR dem Speichern sieht, was passieren wird.
+function zeichneQuickHinweis() {
+  const el = $("todo-quick-hinweis");
+  const roh = $("todo-quick-title").value.trim();
+  // Ein von Hand gewaehltes Datum gewinnt – dann verwirrt der Hinweis nur
+  const erkannt = roh && !$("todo-quick-date").value ? datumAusText(roh) : { datum: null };
+  if (!erkannt.datum) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  el.innerHTML = `<span class="chip active">${esc(dateBadge(erkannt.datum)[1])} · ${esc(fmtDate(new Date(erkannt.datum + "T00:00:00")))}</span>` +
+    (erkannt.titel ? "" : ` <span class="quick-warnung">nur ein Datum – der Titel fehlt noch</span>`);
+}
+
 async function quickAddTodo() {
   const titleEl = $("todo-quick-title");
   const dateEl = $("todo-quick-date");
-  const title = titleEl.value.trim();
-  if (!title) return;
+  const roh = titleEl.value.trim();
+  if (!roh) return;
+  // Explizites Datumsfeld gewinnt; sonst zieht der Parser das Datum aus dem
+  // Text und der Titel wird um die Datumsangabe bereinigt gespeichert.
+  let title = roh, datum = dateEl.value || null;
+  if (!datum) {
+    const erkannt = datumAusText(roh);
+    if (erkannt.datum && erkannt.titel) { datum = erkannt.datum; title = erkannt.titel; }
+  }
   titleEl.disabled = true;
   try {
     const { data, error } = await db.from("todos")
-      .insert({ user_id: user.id, title, due_date: dateEl.value || null }).select().single();
+      .insert({ user_id: user.id, title, due_date: datum }).select().single();
     if (error) throw error;
     titleEl.value = "";
     dateEl.value = "";
+    zeichneQuickHinweis();
     ersetzeInListe(todos, data);
     renderAll();
   } catch (err) {
@@ -1719,6 +1740,8 @@ async function quickAddTodo() {
 }
 $("todo-quick-add").addEventListener("click", quickAddTodo);
 $("todo-quick-title").addEventListener("keydown", (e) => { if (e.key === "Enter") quickAddTodo(); });
+$("todo-quick-title").addEventListener("input", zeichneQuickHinweis);
+$("todo-quick-date").addEventListener("input", zeichneQuickHinweis);
 
 async function toggleTodo(id) {
   const t = todos.find((x) => x.id === id);
@@ -2310,6 +2333,59 @@ document.addEventListener("click", (e) => {
   openTagView(el.dataset.tag);
 }, true);
 
+/* ================= NATUERLICH EINTRAGEN =================
+   "Rechnung morgen" statt Titel tippen, Feld wechseln, Datum waehlen.
+   Bewusst lokale Regeln statt KI-Aufruf: kostet nichts, ist sofort da und
+   fuer Datumsangaben zuverlaessiger als ein Modell. Erkannt werden
+   heute/morgen/uebermorgen, Wochentage, "in N Tagen/Wochen" und 15.8.-Daten.
+   Uhrzeiten bleiben absichtlich im Titel stehen – To-Dos haben kein
+   Zeitfeld, und ein stillschweigend verworfenes "14 Uhr" waere gelogen. */
+
+const WOCHENTAGE = { sonntag: 0, montag: 1, dienstag: 2, mittwoch: 3, donnerstag: 4, freitag: 5, samstag: 6 };
+
+function datumAusText(roh) {
+  const heute = todayMidnight();
+  let text = ` ${roh} `;
+  let datum = null;
+  const inTagen = (n) => { const d = new Date(heute); d.setDate(d.getDate() + n); return d; };
+  // Erster Treffer gewinnt; die Reihenfolge stellt "uebermorgen" vor "morgen",
+  // weil \b vor Umlauten greift und "morgen" sonst mitten im Wort traefe.
+  const regeln = [
+    [/(^|\s)übermorgen(?=\s|$)/i, () => inTagen(2)],
+    [/(^|\s)morgen(?=\s|$)/i, () => inTagen(1)],
+    [/(^|\s)heute(?=\s|$)/i, () => heute],
+    [/(^|\s)in (\d{1,2}) tagen?(?=\s|$)/i, (m) => inTagen(parseInt(m[2], 10))],
+    [/(^|\s)in (\d{1,2}) wochen?(?=\s|$)/i, (m) => inTagen(7 * parseInt(m[2], 10))],
+    [/(^|\s)(?:am |nächsten |naechsten )?(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)(?=\s|$)/i,
+      (m) => { // naechstes Vorkommen; heute gemeint waere "heute", also nie 0 Tage
+        let diff = (WOCHENTAGE[m[2].toLowerCase()] - heute.getDay() + 7) % 7;
+        return inTagen(diff === 0 ? 7 : diff);
+      }],
+    [/(^|\s)(?:am )?(\d{1,2})\.(\d{1,2})\.(\d{4})?(?=\s|$)/, (m) => {
+      const tagN = parseInt(m[2], 10), monatN = parseInt(m[3], 10);
+      const jahr = m[4] ? parseInt(m[4], 10) : heute.getFullYear();
+      let d = new Date(jahr, monatN - 1, tagN);
+      // Ohne Jahr gilt das naechste Vorkommen – "15.1." im August meint Januar
+      if (!m[4] && d < heute) d = new Date(jahr + 1, monatN - 1, tagN);
+      // Date rechnet 31.02. still in Maerz um – das ist dann keine Angabe
+      return d.getDate() === tagN && d.getMonth() === monatN - 1 ? d : null;
+    }],
+  ];
+  for (const [re, mach] of regeln) {
+    const m = text.match(re);
+    if (!m) continue;
+    const d = mach(m);
+    if (!d) continue;
+    datum = toDateStr(d);
+    text = text.replace(re, " ");
+    break;
+  }
+  const titel = text.replace(/\s+/g, " ").trim();
+  // Bestand der Text nur aus der Datumsangabe, bleibt der Titel leer –
+  // der Aufrufer entscheidet, was das heisst.
+  return { datum, titel };
+}
+
 /* ================= ASSISTENT =================
    Eine zweite Tuer in dieselbe App: fragen, was ansteht, oder sagen, was
    passieren soll. Die Antworten kommen aus der Edge Function "assistent",
@@ -2527,11 +2603,93 @@ function notizAusschnitt(inhalt, begriffe) {
   return treffer.length > 80 ? treffer.slice(0, 80) + "…" : treffer;
 }
 
+/* ---- Befehlsfeld: die Suche kann auch anlegen ----
+   Ein Feld fuer beides – wer "netflix" tippt, sucht; wer "todo rechnung
+   morgen" tippt, legt an. Mit Praefix (todo/notiz/abo/projekt) wird die
+   Aktion gezielt, ohne Praefix stehen To-Do und Notiz als Angebot unter
+   der Eingabe. Nichts passiert ohne Antippen der Aktionszeile. */
+
+const BEFEHL_PRAEFIXE = {
+  todo: "todo", "to-do": "todo", aufgabe: "todo",
+  notiz: "note", note: "note",
+  abo: "subscription",
+  projekt: "project", kunde: "project",
+};
+
+function sucheAktionen(eingabe) {
+  const roh = eingabe.trim();
+  if (roh.length < 2) return [];
+  const praefix = roh.match(/^(\S+)\s+(.+)$/);
+  const art = praefix && BEFEHL_PRAEFIXE[praefix[1].toLowerCase()];
+  if (art) return [{ art, text: praefix[2].trim() }];
+  // Ohne Praefix: die zwei schnellen Wege anbieten – Abo/Projekt brauchen
+  // ohnehin das Formular und lohnen keine eigene Zeile fuer jeden Suchbegriff.
+  return [{ art: "todo", text: roh }, { art: "note", text: roh }];
+}
+
+const AKTION_NAME = { todo: "To-Do", note: "Notiz", subscription: "Abo", project: "Projekt" };
+
+function aktionszeileHTML(a, index) {
+  const erkannt = a.art === "todo" ? datumAusText(a.text) : null;
+  const anzeige = erkannt?.datum && erkannt.titel ? erkannt.titel : a.text;
+  const verb = a.art === "subscription" || a.art === "project" ? "im Formular öffnen" : "anlegen";
+  // Der Datums-Chip sitzt im rechten Slot der Zeile – im Textbereich wuerde
+  // ihn dessen Ellipse bei langen Titeln einfach abschneiden.
+  const rechts = erkannt?.datum && erkannt.titel
+    ? `<div class="tag-row-rechts"><span class="aktion-datum">${esc(dateBadge(erkannt.datum)[1])}</span></div>` : "";
+  return `
+  <div class="tag-row aktion" data-aktion="${index}">
+    <div class="tag-row-symbol"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></div>
+    <div class="tag-row-body">${esc(AKTION_NAME[a.art])} „${esc(anzeige)}“ ${verb}</div>
+    ${rechts}
+  </div>`;
+}
+
+async function fuehreAktionAus(a) {
+  if (a.art === "todo") {
+    const erkannt = datumAusText(a.text);
+    const titel = erkannt.datum && erkannt.titel ? erkannt.titel : a.text;
+    const { data, error } = await db.from("todos")
+      .insert({ user_id: user.id, title: titel, due_date: erkannt.datum && erkannt.titel ? erkannt.datum : null })
+      .select().single();
+    if (error) { showToast("Fehler beim Speichern"); console.error(error); return; }
+    ersetzeInListe(todos, data);
+    renderAll();
+    schliesseSuche();
+    showToast("To-Do gespeichert");
+  } else if (a.art === "note") {
+    const { data, error } = await db.from("notes")
+      .insert({ user_id: user.id, content: a.text }).select().single();
+    if (error) { showToast("Fehler beim Speichern"); console.error(error); return; }
+    ersetzeInListe(notes, data);
+    renderAll();
+    schliesseSuche();
+    showToast("Notiz gespeichert");
+  } else if (a.art === "subscription") {
+    schliesseSuche();
+    openModal(null);
+    $("f-name").value = a.text;
+    refreshPreview();
+  } else if (a.art === "project") {
+    schliesseSuche();
+    openProjectModal(null);
+    $("project-f-name").value = a.text;
+  }
+}
+
 function zeichneSuche() {
   const box = $("search-results");
-  const erg = sucheTreffer($("search-input").value);
+  const eingabe = $("search-input").value;
+  const aktionen = sucheAktionen(eingabe);
+  const aktionenHTML = aktionen.length
+    ? `<div class="tag-sec-head">Anlegen</div>` + aktionen.map(aktionszeileHTML).join("")
+    : "";
+  const bindeAktionen = () => box.querySelectorAll("[data-aktion]").forEach((el) =>
+    el.addEventListener("click", () => fuehreAktionAus(aktionen[Number(el.dataset.aktion)])));
+
+  const erg = sucheTreffer(eingabe);
   if (!erg) {
-    box.innerHTML = `<div class="hint-text">Durchsucht Projekte, To-Dos, Abos, Notizen und Kalender-Termine.</div>`;
+    box.innerHTML = `<div class="hint-text">Suchen – oder anlegen: „todo Rechnung morgen“, „notiz …“, „projekt …“.</div>`;
     return;
   }
   const b = erg.begriffe;
@@ -2574,8 +2732,12 @@ function zeichneSuche() {
       </div>`).join(""));
   }
 
-  box.innerHTML = teile.join("") || leerHTML("Nichts gefunden.");
-  box.querySelectorAll(".tag-row:not(.ohne-ziel)").forEach((el) =>
+  // Aktionen stehen VOR den Treffern: wer tippt, um anzulegen, soll nicht
+  // erst an einer Trefferliste vorbeiscrollen. Bei leeren Treffern ersetzt
+  // die Aktionszeile den "Nichts gefunden"-Kasten – anlegen IST dann der Weg.
+  box.innerHTML = aktionenHTML + (teile.join("") || (aktionen.length ? "" : leerHTML("Nichts gefunden.")));
+  bindeAktionen();
+  box.querySelectorAll(".tag-row:not(.ohne-ziel):not(.aktion)").forEach((el) =>
     el.addEventListener("click", () => { schliesseSuche(); oeffneEintrag(el.dataset.art, el.dataset.id); }));
 }
 

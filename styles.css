@@ -778,6 +778,21 @@ mark {
 }
 /* Kalender-Termine sind reine Anzeige – kein Zeigefinger, kein Nachgeben */
 .tag-row.ohne-ziel { cursor: default; }
+/* Aktionszeile im Befehlsfeld: goldener Rand sagt "hier passiert etwas" */
+.tag-row.aktion { border-color: var(--border-gold); }
+.tag-row.aktion .tag-row-symbol { color: var(--gold-2); opacity: 1; }
+.aktion-datum {
+  font-size: 11px;
+  color: var(--gold-2);
+  background: rgba(212, 175, 55, 0.14);
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+/* Live-Hinweis unter der Schnelleingabe */
+.quick-hinweis { margin: -8px 0 14px; display: flex; align-items: center; gap: 8px; }
+.quick-hinweis .chip { cursor: default; }
+.quick-warnung { font-size: 12px; color: var(--warn); }
 #search-results { max-height: 52vh; overflow-y: auto; margin-bottom: 4px; }
 
 /* ---------- Agenda (Übersicht) ---------- */

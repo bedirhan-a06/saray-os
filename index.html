@@ -272,10 +272,12 @@
   <section id="tab-todos" class="hidden">
     <div class="section-head"><h2>Meine To-Dos</h2></div>
     <div class="todo-quickadd">
-      <input type="text" id="todo-quick-title" placeholder="Neues To-Do … (#tag geht auch)">
+      <input type="text" id="todo-quick-title" placeholder="Neues To-Do … („morgen“ oder „15.8.“ versteht es)">
       <input type="date" id="todo-quick-date" title="Fälligkeit (optional)">
       <button class="btn gold" id="todo-quick-add" title="Hinzufügen" aria-label="Hinzufügen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
     </div>
+    <!-- Zeigt live, was aus dem Text verstanden wurde – bevor gespeichert wird -->
+    <div class="quick-hinweis hidden" id="todo-quick-hinweis"></div>
     <div class="todos list" id="todos-container"></div>
   </section>
 
