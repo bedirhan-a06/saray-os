@@ -173,6 +173,53 @@ wird, was geladen ist. Gedacht als Ausweg, falls das Supabase-Projekt einmal
 nicht erreichbar ist; es ist **kein verschlüsseltes Backup**, die Datei liegt im
 Klartext (auch die Notizen, die in der App hinter dem PIN liegen).
 
+## Assistent
+
+Eine zweite Tür in dieselbe App: fragen, was ansteht, oder sagen, was passieren
+soll — als Gespräch statt über Formulare. Der Sprechblasen-Knopf sitzt links
+neben der Lupe.
+
+### Bestandteile
+
+| Wo | Was |
+| --- | --- |
+| `functions/assistent/index.ts` | Edge Function: Kontext + Gespräch + Vorschlag in einem Aufruf |
+| Vault `openai_api_key` | derselbe Schlüssel wie bei der Sprachnotiz, keine neue Ablage |
+
+### Kostendisziplin (bewusst so gebaut)
+
+- **Kleines Modell** (gpt-4o-mini) — die Intelligenz kommt aus den mitgegebenen
+  Daten, nicht aus dem Modell.
+- **Kleiner, gleichbleibend großer Kontext**: 7-Tage-Fenster, überfällige Abos,
+  offene Rechnungen, Budget, Monatseinnahmen. Wächst der Datenbestand über
+  Monate, wächst dieser Ausschnitt NICHT mit — die Kosten pro Nachricht bleiben
+  stabil.
+- **Verlauf gekappt** auf die letzten 8 Nachrichten (`VERLAUF_LIMIT`), sonst
+  wird eine lange Sitzung mit jeder Runde teurer.
+- **Kurze Antworten** (Stichpunkte) stehen im Prompt — Ausgabe-Tokens sind die
+  teuren.
+- **Nichts läuft im Hintergrund**: gerechnet wird nur, wenn eine Nachricht
+  abgeschickt wird.
+
+### Grenzen, die gelten
+
+- Der Assistent **speichert nie selbst**. Ein erkannter Wunsch wird zum
+  Vorschlag: To-Do/Notiz als Karte mit Übernehmen-Knopf, Abo/Projekt öffnen das
+  echte Formular vorausgefüllt — dieselbe Disziplin wie bei der Sprachnotiz.
+- Vorschlags-Felder laufen durch dieselbe Bereinigung wie dort
+  (`saubererVorschlag`): Datum per Regex, Zahlen mit Grenzen, Enums per
+  Allowliste. Geld am Projekt heißt `order_value`, beim Abo `price`.
+- Fragen außerhalb von Bedos Leben/Websaray lenkt er zurück, statt zu
+  plaudern — er ist kein ChatGPT-Ersatz.
+- Der Verlauf lebt nur im Speicher der Sitzung; beim Abmelden ist er weg.
+  Serverseitig wird nichts davon gespeichert.
+
+### Wenn nichts kommt
+
+1. Logs: Supabase Dashboard → Edge Functions → `assistent`.
+2. „Das hat gerade nicht geklappt" in der Blase: meist Netz oder ein
+   OpenAI-Aussetzer — einfach nochmal senden.
+
 ## Sprachnotiz
 
 Aufnehmen, mitschreiben lassen, einordnen – und erst nach Bestätigung

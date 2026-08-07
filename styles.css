@@ -696,6 +696,67 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .tag-sec-hint { font-size: 12px; color: var(--text-dim); padding: 2px 4px 0; }
 .tag-dim { color: var(--text-dim); font-size: 12px; }
 
+/* ---------- Assistent ---------- */
+.assistent-modal { display: flex; flex-direction: column; }
+.assistent-thread {
+  flex: 1;
+  min-height: 180px;
+  max-height: 52vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+.assistent-nachricht {
+  max-width: 86%;
+  padding: 9px 13px;
+  border-radius: 15px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.assistent-nachricht.nutzer {
+  align-self: flex-end;
+  background: var(--gold-grad);
+  color: #14110a;
+  border-bottom-right-radius: 4px;
+  font-weight: 500;
+}
+.assistent-nachricht.assistent {
+  align-self: flex-start;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.assistent-nachricht.tippt { color: var(--text-dim); letter-spacing: 2px; }
+.assistent-eingabe { display: flex; gap: 8px; }
+.assistent-eingabe input { flex: 1; }
+.assistent-eingabe .btn { flex-shrink: 0; width: 46px; }
+/* Vorschlag des Assistenten: dieselbe Bestaetigungs-Idee wie bei der
+   Sprachnotiz – nichts wird gespeichert, bevor Bedo es antippt. */
+.vorschlag-karte {
+  align-self: flex-start;
+  width: 86%;
+  background: var(--panel-2);
+  border: 1px solid var(--border-gold);
+  border-radius: 14px;
+  padding: 11px 13px;
+}
+.vorschlag-kopf {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--gold-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 7px;
+}
+.vorschlag-feld { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
+.vorschlag-feld span:first-child { color: var(--text-dim); flex-shrink: 0; }
+.vorschlag-feld span:last-child { text-align: right; word-break: break-word; }
+.vorschlag-karte .btn { margin-top: 9px; padding: 9px 14px; font-size: 13.5px; }
+
 /* ---------- Suche ---------- */
 /* Lupe liegt im Feld statt daneben – das Feld soll die volle Breite behalten */
 .suche-feld { position: relative; }

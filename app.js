@@ -524,6 +524,7 @@ async function initAuth() {
     if (event === "SIGNED_OUT") {
       user = null; profile = null; subs = []; todos = []; notes = []; projects = [];
       googleFeed = null; googleEvents = [];
+      assistentVerlauf = [];   // das Gespraech gehoert zur Sitzung, nicht zum Geraet
       localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
       $("app-view").classList.add("hidden");
       $("auth-view").classList.remove("hidden");
@@ -2308,6 +2309,143 @@ document.addEventListener("click", (e) => {
   e.stopPropagation();
   openTagView(el.dataset.tag);
 }, true);
+
+/* ================= ASSISTENT =================
+   Eine zweite Tuer in dieselbe App: fragen, was ansteht, oder sagen, was
+   passieren soll. Die Antworten kommen aus der Edge Function "assistent",
+   die nur einen kleinen Datenausschnitt kennt. Gespeichert wird NIE aus dem
+   Gespraech heraus – ein Vorschlag wird zur Karte mit Uebernehmen-Knopf,
+   und Abo/Projekt oeffnen wie bei der Sprachnotiz das echte Formular.
+   Der Verlauf lebt nur im Speicher dieser Sitzung: nichts existiert nur im
+   Chat, die Tabs bleiben die Wahrheit. */
+
+let assistentVerlauf = [];   // { rolle: "nutzer"|"assistent", text, vorschlag? }
+let assistentWartet = false;
+
+const VORSCHLAG_TITEL = { todo: "To-Do", note: "Notiz", subscription: "Abo", project: "Projekt" };
+
+function vorschlagKarteHTML(v, index) {
+  const zeilen = [];
+  const zeile = (name, wert) => wert != null && zeilen.push(
+    `<div class="vorschlag-feld"><span>${esc(name)}</span><span>${esc(String(wert))}</span></div>`);
+  if (v.type === "todo") { zeile("Titel", v.title); zeile("Fällig", v.due_date && fmtDate(new Date(v.due_date + "T00:00:00"))); }
+  if (v.type === "note") { zeile("Notiz", v.content || v.title); }
+  if (v.type === "subscription") { zeile("Name", v.name); zeile("Preis", v.price != null ? fmt(v.price) : null); zeile("Kategorie", v.category); }
+  if (v.type === "project") { zeile("Name", v.name || v.title); zeile("Art", v.kind); zeile("Auftragswert", v.order_value != null ? fmt(v.order_value) : null); zeile("Deadline", v.due_date && fmtDate(new Date(v.due_date + "T00:00:00"))); }
+  const formular = v.type === "subscription" || v.type === "project";
+  return `
+  <div class="vorschlag-karte">
+    <div class="vorschlag-kopf">${esc(VORSCHLAG_TITEL[v.type] || "Eintrag")}</div>
+    ${zeilen.join("")}
+    <button class="btn gold block" data-vorschlag="${index}">${formular ? "Im Formular öffnen" : "Übernehmen"}</button>
+  </div>`;
+}
+
+function zeichneAssistent() {
+  const box = $("assistent-thread");
+  if (!assistentVerlauf.length) {
+    box.innerHTML = `<div class="hint-text">Frag, was ansteht („Was ist heute wichtig?") oder sag, was passieren soll („Leg ein To-Do für morgen an").</div>`;
+    return;
+  }
+  box.innerHTML = assistentVerlauf.map((m, i) =>
+    `<div class="assistent-nachricht ${m.rolle}">${esc(m.text)}</div>` +
+    (m.vorschlag ? vorschlagKarteHTML(m.vorschlag, i) : "")
+  ).join("") + (assistentWartet ? `<div class="assistent-nachricht assistent tippt">…</div>` : "");
+  box.querySelectorAll("[data-vorschlag]").forEach((b) =>
+    b.addEventListener("click", () => uebernehmeVorschlag(Number(b.dataset.vorschlag))));
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendeAnAssistent() {
+  const eingabe = $("assistent-input");
+  const text = eingabe.value.trim();
+  if (!text || assistentWartet) return;
+  eingabe.value = "";
+  assistentVerlauf.push({ rolle: "nutzer", text });
+  assistentWartet = true;
+  zeichneAssistent();
+  try {
+    // Vorschlaege bleiben clientseitig – zum Server gehen nur Rolle und Text
+    const { data, error } = await db.functions.invoke("assistent", {
+      body: { nachrichten: assistentVerlauf.map((m) => ({ rolle: m.rolle, text: m.text })) }
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    assistentVerlauf.push({ rolle: "assistent", text: data.antwort || "…", vorschlag: data.vorschlag || null });
+  } catch (err) {
+    console.warn("Assistent:", err);
+    assistentVerlauf.push({ rolle: "assistent", text: "Das hat gerade nicht geklappt – versuch es nochmal." });
+  } finally {
+    assistentWartet = false;
+    zeichneAssistent();
+    eingabe.focus();
+  }
+}
+
+async function uebernehmeVorschlag(index) {
+  const v = assistentVerlauf[index]?.vorschlag;
+  if (!v) return;
+  try {
+    if (v.type === "todo") {
+      const titel = v.title || v.content;
+      if (!titel) { showToast("Kein Titel erkannt"); return; }
+      const { data, error } = await db.from("todos")
+        .insert({ user_id: user.id, title: titel, due_date: v.due_date || null }).select().single();
+      if (error) throw error;
+      ersetzeInListe(todos, data);
+      renderAll();
+      showToast("To-Do gespeichert");
+    } else if (v.type === "note") {
+      const inhalt = v.content || v.title;
+      if (!inhalt) { showToast("Keine Notiz erkannt"); return; }
+      const { data, error } = await db.from("notes")
+        .insert({ user_id: user.id, content: inhalt }).select().single();
+      if (error) throw error;
+      ersetzeInListe(notes, data);
+      renderAll();
+      showToast("Notiz gespeichert");
+    } else if (v.type === "subscription") {
+      // Pflichtfelder, die aus einem Satz kaum sicher kommen -> echtes Formular
+      schliesseAssistent();
+      openModal(null);
+      $("f-name").value = v.name || "";
+      if (v.price != null) $("f-price").value = v.price;
+      $("f-next").value = v.next_payment || toDateStr(todayMidnight());
+      if ([1, 3, 6, 12].includes(v.cycle_months)) $("f-cycle").value = String(v.cycle_months);
+      if (v.category) $("f-category").value = v.category;
+      refreshPreview();
+      refreshVatHint();
+      return;
+    } else if (v.type === "project") {
+      schliesseAssistent();
+      openProjectModal(null);
+      $("project-f-name").value = v.name || v.title || "";
+      if (v.kind) $("project-f-kind").value = v.kind;
+      if (v.due_date) $("project-f-date").value = v.due_date;
+      if (v.order_value != null) $("project-f-value").value = v.order_value;
+      return;
+    }
+    // Nach dem Uebernehmen soll die Karte nicht erneut zum Speichern einladen
+    assistentVerlauf[index].vorschlag = null;
+    zeichneAssistent();
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  }
+}
+
+function oeffneAssistent() {
+  zeichneAssistent();
+  oeffneOverlay("assistent-overlay");
+  setTimeout(() => $("assistent-input").focus(), 60);
+}
+function schliesseAssistent() { schliesseOverlay("assistent-overlay"); }
+
+$("assistent-btn").addEventListener("click", oeffneAssistent);
+$("assistent-close-btn").addEventListener("click", schliesseAssistent);
+$("assistent-send-btn").addEventListener("click", sendeAnAssistent);
+$("assistent-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendeAnAssistent(); });
+$("assistent-overlay").addEventListener("click", (e) => { if (e.target.id === "assistent-overlay") schliesseAssistent(); });
 
 /* ================= SUCHE =================
    Die #tags verbinden die Bausteine schon quer, aber nur, wenn man beim
