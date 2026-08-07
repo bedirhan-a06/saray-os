@@ -16,6 +16,8 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // Probleme mit dem Versand gibt. Muss laut RFC 8292 erreichbar sein.
 const KONTAKT = "mailto:b.akguel01@gmail.com";
 const ZEITZONE = "Europe/Berlin";
+// Ab so vielen Tagen gilt eine offene Rechnung als erinnerungswuerdig
+const RECHNUNG_FRIST_TAGE = 14;
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -154,10 +156,23 @@ async function taeglicherRundlauf() {
       .lte("due_date", plusTage(tag, vorlauf))
       .order("due_date");
 
+    // Rechnungen, die schon eine Weile draussen sind und nicht bezahlt wurden.
+    // Feste Frist statt Einstellung: 14 Tage sind die uebliche Zahlungsfrist,
+    // und eine weitere Schraube in den Einstellungen braucht niemand.
+    const { data: rechnungen } = await admin
+      .from("projects")
+      .select("name, order_value, invoiced_on")
+      .eq("user_id", p.user_id)
+      .eq("payment_status", "Rechnung raus")
+      .not("invoiced_on", "is", null)
+      .lte("invoiced_on", plusTage(tag, -RECHNUNG_FRIST_TAGE))
+      .order("invoiced_on");
+
     const abos = faellig ?? [];
     const offen = aufgaben ?? [];
     const projekte = deadlines ?? [];
-    if (!abos.length && !offen.length && !projekte.length) continue;
+    const ausstehend = rechnungen ?? [];
+    if (!abos.length && !offen.length && !projekte.length && !ausstehend.length) continue;
 
     const { data: geraete } = await admin
       .from("push_subscriptions")
@@ -169,6 +184,7 @@ async function taeglicherRundlauf() {
     if (abos.length) teile.push(abos.length === 1 ? "1 Zahlung" : `${abos.length} Zahlungen`);
     if (offen.length) teile.push(offen.length === 1 ? "1 To-Do" : `${offen.length} To-Dos`);
     if (projekte.length) teile.push(projekte.length === 1 ? "1 Deadline" : `${projekte.length} Deadlines`);
+    if (ausstehend.length) teile.push(ausstehend.length === 1 ? "1 offene Rechnung" : `${ausstehend.length} offene Rechnungen`);
     const titel = teile.join(" · ");
 
     const wannText = (datum: string) =>
@@ -180,6 +196,11 @@ async function taeglicherRundlauf() {
       ...abos.map((s) => `${s.name}: ${alsEuro(brutto(s))} am ${alsDeutschesDatum(s.next_payment)}`),
       ...offen.map((t) => `☐ ${t.title} (${wannText(t.due_date)})`),
       ...projekte.map((pr) => `📁 ${pr.name} (${wannText(pr.due_date)})`),
+      ...ausstehend.map((r) => {
+        const tage = Math.round((Date.parse(tag + "T00:00:00Z") - Date.parse(r.invoiced_on + "T00:00:00Z")) / 864e5);
+        const betrag = Number(r.order_value) > 0 ? ` ${alsEuro(r.order_value)}` : "";
+        return `💶 ${r.name}${betrag} – Rechnung seit ${tage} Tagen offen`;
+      }),
     ].join("\n");
 
     for (const g of geraete) {

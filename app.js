@@ -753,6 +753,7 @@ function activeSubs() { return subs.filter((s) => !s.archived); }
 function renderAll() {
   renderBegruessung();
   renderSummary();
+  renderEinnahmen();
   renderBudget();
   renderOverdue();
   renderSavingsHint();
@@ -1797,6 +1798,81 @@ function sortProjects(list) {
   });
 }
 
+/* ---- Einnahmen ----
+   Die App kannte lange nur Geld, das rausgeht. Hier steht die Gegenrichtung:
+   was ist diesen Monat eingegangen, was ist raus und noch nicht bezahlt,
+   was steht als Angebot oder Auftrag noch aus. */
+
+function einnahmenZahlen() {
+  const heute = todayMidnight();
+  const monatsStart = new Date(heute.getFullYear(), heute.getMonth(), 1);
+  let eingegangen = 0, offen = 0, aussicht = 0, aeltesteRechnung = null;
+  projects.forEach((p) => {
+    const wert = Number(p.order_value);
+    if (!Number.isFinite(wert) || wert <= 0) return;
+    if (p.payment_status === "bezahlt") {
+      if (p.paid_on && new Date(p.paid_on + "T00:00:00") >= monatsStart) eingegangen += wert;
+    } else if (p.payment_status === "Rechnung raus") {
+      offen += wert;
+      const tage = rechnungOffenSeit(p);
+      if (tage !== null && (aeltesteRechnung === null || tage > aeltesteRechnung)) aeltesteRechnung = tage;
+    } else if (p.payment_status === "Angebot raus" || p.payment_status === "beauftragt") {
+      aussicht += wert;
+    }
+  });
+  return { eingegangen, offen, aussicht, aeltesteRechnung };
+}
+
+function renderEinnahmen() {
+  const box = $("einnahmen-panel");
+  if (!box) return;
+  // Ohne einen einzigen Auftragswert waere das Panel nur eine Reihe Nullen
+  const hatWerte = projects.some((p) => Number(p.order_value) > 0);
+  box.classList.toggle("hidden", !hatWerte);
+  if (!hatWerte) return;
+
+  const z = einnahmenZahlen();
+  const monat = todayMidnight().toLocaleDateString("de-DE", { month: "long" });
+  const zeilen = [
+    { name: monat, wert: z.eingegangen, klasse: "ein" },
+    { name: "offen", wert: z.offen, klasse: "offen", hinweis: z.aeltesteRechnung > 0 ? `längste seit ${z.aeltesteRechnung} Tagen` : "" },
+    { name: "in Aussicht", wert: z.aussicht, klasse: "aussicht" },
+  ];
+  box.innerHTML = `
+    <div class="einnahmen-kopf">Websaray</div>
+    ${zeilen.map((r) => `
+      <div class="einnahmen-zeile">
+        <span class="einnahmen-name">${esc(r.name)}${r.hinweis ? ` <span class="einnahmen-hinweis">${esc(r.hinweis)}</span>` : ""}</span>
+        <span class="einnahmen-wert ${r.klasse}">${fmt(r.wert)}</span>
+      </div>`).join("")}`;
+}
+
+/* ---- Geld an Projekten ---- */
+const GELD_KLASSE = {
+  "Angebot raus": "geld-angebot",
+  "beauftragt": "geld-beauftragt",
+  "Rechnung raus": "geld-rechnung",
+  "bezahlt": "geld-bezahlt",
+};
+
+// Tage seit Rechnungsstellung, solange sie offen ist – sonst null
+function rechnungOffenSeit(p) {
+  if (p.payment_status !== "Rechnung raus" || !p.invoiced_on) return null;
+  return Math.round((todayMidnight() - new Date(p.invoiced_on + "T00:00:00")) / 864e5);
+}
+
+function geldZeile(p) {
+  const stand = p.payment_status && p.payment_status !== "kein" ? p.payment_status : null;
+  if (!stand && p.order_value == null) return "";
+  const tage = rechnungOffenSeit(p);
+  const zusatz = tage !== null && tage > 0 ? ` · seit ${tage} ${tage === 1 ? "Tag" : "Tagen"}` : "";
+  return `
+    <div class="project-geld">
+      ${p.order_value != null ? `<span class="geld-wert">${fmt(p.order_value)}</span>` : ""}
+      ${stand ? `<span class="geld-chip ${GELD_KLASSE[stand] || ""}">${esc(stand)}${zusatz}</span>` : ""}
+    </div>`;
+}
+
 function projectCardHTML(p) {
   const metaParts = [p.kind];
   if (p.due_date && p.status !== "fertig") {
@@ -1806,6 +1882,7 @@ function projectCardHTML(p) {
   if (offen > 0) metaParts.push(offen === 1 ? "1 To-Do offen" : `${offen} To-Dos offen`);
   // Link ohne Protokoll anzeigen – der Klick öffnet trotzdem die volle Adresse
   const linkText = (p.link || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const geld = geldZeile(p);
   return `
   <div class="project-card ${p.status === "fertig" ? "done" : ""}" data-id="${p.id}">
     <div class="project-top">
@@ -1813,6 +1890,7 @@ function projectCardHTML(p) {
       <span class="status-chip ${PROJECT_STATUS_CLASS[p.status] || "st-offen"}">${esc(p.status)}</span>
     </div>
     <div class="project-meta">${esc(metaParts.join(" · "))}</div>
+    ${geld}
     ${p.note ? `<div class="project-note">${tagTextHTML(p.note)}</div>` : ""}
     ${p.link ? `<a class="project-link" href="${esc(p.link)}" target="_blank" rel="noopener">${svgIcon("link")}${esc(linkText)}</a>` : ""}
   </div>`;
@@ -1848,6 +1926,10 @@ function openProjectModal(id) {
     $("project-f-date").value = p.due_date || "";
     $("project-f-link").value = p.link || "";
     $("project-f-note").value = p.note || "";
+    $("project-f-value").value = p.order_value ?? "";
+    $("project-f-pay").value = p.payment_status || "kein";
+    $("project-f-invoiced").value = p.invoiced_on || "";
+    $("project-f-paid").value = p.paid_on || "";
   } else {
     $("project-f-name").value = "";
     $("project-f-kind").value = "Eigenes";
@@ -1855,9 +1937,25 @@ function openProjectModal(id) {
     $("project-f-date").value = "";
     $("project-f-link").value = "";
     $("project-f-note").value = "";
+    $("project-f-value").value = "";
+    $("project-f-pay").value = "kein";
+    $("project-f-invoiced").value = "";
+    $("project-f-paid").value = "";
   }
+  zeichneGeldFelder();
   $("project-overlay").classList.add("open");
   setTimeout(() => $("project-f-name").focus(), 60);
+}
+
+// Die Datumsfelder erscheinen erst, wenn der Geld-Status sie braucht – sonst
+// stehen im Formular zwei Felder, die bei den meisten Projekten leer bleiben.
+function zeichneGeldFelder() {
+  const stand = $("project-f-pay").value;
+  const rechnung = stand === "Rechnung raus" || stand === "bezahlt";
+  const bezahlt = stand === "bezahlt";
+  $("project-feld-rechnung").classList.toggle("hidden", !rechnung);
+  $("project-feld-bezahlt").classList.toggle("hidden", !bezahlt);
+  $("project-geld-daten").classList.toggle("hidden", !rechnung);
 }
 function closeProjectModal() { $("project-overlay").classList.remove("open"); editingProjectId = null; }
 
@@ -1867,6 +1965,8 @@ async function saveProjectModal() {
   let link = $("project-f-link").value.trim();
   // "pixelsaray.vercel.app" eingetippt soll trotzdem klickbar sein
   if (link && !/^https?:\/\//i.test(link)) link = "https://" + link;
+  const wert = $("project-f-value").value === "" ? null : Math.max(0, parseFloat($("project-f-value").value));
+  const geldStand = $("project-f-pay").value;
   const row = {
     name,
     kind: $("project-f-kind").value,
@@ -1874,6 +1974,12 @@ async function saveProjectModal() {
     due_date: $("project-f-date").value || null,
     link: link || null,
     note: $("project-f-note").value.trim() || null,
+    order_value: Number.isFinite(wert) ? wert : null,
+    payment_status: geldStand,
+    // Daten nur behalten, solange der Stand sie überhaupt kennt – sonst bliebe
+    // ein Bezahlt-Datum stehen, nachdem der Stand zurückgesetzt wurde.
+    invoiced_on: (geldStand === "Rechnung raus" || geldStand === "bezahlt") ? ($("project-f-invoiced").value || null) : null,
+    paid_on: geldStand === "bezahlt" ? ($("project-f-paid").value || null) : null,
     updated_at: new Date().toISOString()
   };
   const btn = $("project-save-btn");
@@ -1913,6 +2019,17 @@ async function deleteProject(id) {
 }
 $("project-save-btn").addEventListener("click", saveProjectModal);
 $("project-cancel-btn").addEventListener("click", closeProjectModal);
+$("project-f-pay").addEventListener("change", (e) => {
+  // Beim Umstellen gleich das heutige Datum anbieten – meistens stimmt es,
+  // und wenn nicht, steht das Feld ja offen da.
+  const heute = toDateStr(todayMidnight());
+  if (e.target.value === "Rechnung raus" && !$("project-f-invoiced").value) $("project-f-invoiced").value = heute;
+  if (e.target.value === "bezahlt") {
+    if (!$("project-f-invoiced").value) $("project-f-invoiced").value = heute;
+    if (!$("project-f-paid").value) $("project-f-paid").value = heute;
+  }
+  zeichneGeldFelder();
+});
 $("project-delete-btn").addEventListener("click", () => deleteProject(editingProjectId));
 $("project-overlay").addEventListener("click", (e) => { if (e.target.id === "project-overlay") closeProjectModal(); });
 

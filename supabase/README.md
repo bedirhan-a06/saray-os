@@ -3,9 +3,10 @@
 ## Web Push
 
 Erinnerungen kommen an, auch wenn die App geschlossen ist. Der tägliche
-Rundlauf erinnert an fällige Abo-Zahlungen, offene To-Dos mit Datum und
+Rundlauf erinnert an fällige Abo-Zahlungen, offene To-Dos mit Datum,
 Projekt-Deadlines (Überfälliges bleibt drin, bis es abgehakt bzw. der
-Projektstatus auf „fertig" gestellt ist).
+Projektstatus auf „fertig" gestellt ist) und an Rechnungen, die seit mehr als
+`RECHNUNG_FRIST_TAGE` (14) draußen sind und nicht bezahlt wurden.
 
 ### Bestandteile
 
@@ -88,6 +89,23 @@ die App ruft beim Start ab und hält das Ergebnis 15 Minuten im Client-Cache.
 3. Statusfelder in `google_calendar_feeds` (`last_status`, `last_error`) zeigen
    das Ergebnis des letzten Abrufs.
 4. Logs: Supabase Dashboard → Edge Functions → `google-calendar`.
+
+## Geld an Projekten
+
+Die App kannte lange nur Geld, das rausgeht (Abos). Kundenprojekte tragen
+jetzt die Gegenrichtung: `order_value` (Auftragswert) und `payment_status`
+(`kein` → `Angebot raus` → `beauftragt` → `Rechnung raus` → `bezahlt`), dazu
+`invoiced_on` und `paid_on`.
+
+Das Websaray-Panel auf der Übersicht summiert daraus drei Zahlen: diesen Monat
+eingegangen (nach `paid_on`), offen (alles mit `Rechnung raus`) und in Aussicht
+(`Angebot raus` + `beauftragt`). Ohne einen einzigen Auftragswert bleibt das
+Panel versteckt.
+
+Die Datumsfelder erscheinen im Formular erst, wenn der Stand sie braucht, und
+werden beim Umstellen mit dem heutigen Tag vorbelegt. Wird der Stand
+zurückgesetzt, fallen sie wieder weg – sonst bliebe ein Bezahlt-Datum an einem
+Projekt stehen, das gar nicht mehr als bezahlt gilt.
 
 ## Sprachnotiz
 
