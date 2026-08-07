@@ -107,6 +107,29 @@ werden beim Umstellen mit dem heutigen Tag vorbelegt. Wird der Stand
 zurückgesetzt, fallen sie wieder weg – sonst bliebe ein Bezahlt-Datum an einem
 Projekt stehen, das gar nicht mehr als bezahlt gilt.
 
+## Laden, Fehler, Datensicherung
+
+Beim Start laufen die sechs Abrufe (Profil, Abos, To-Dos, Notizen, Projekte,
+Kalender-Adresse) parallel statt nacheinander; nur die Google-Termine hängen am
+Feed und kommen danach. Solange etwas unterwegs ist, stehen graue Platzhalter in
+den Listen und die Kennzahlen oben treten zurück – sie sind noch nicht belastbar.
+
+Scheitert ein Abruf, bleibt der bisherige Stand stehen und der Bereich meldet
+„Konnte nicht geladen werden" mit einem Knopf, der nur diesen einen Bereich neu
+holt (`ladeBereichNeu`). Wichtig, weil ein leerer Bereich sonst genauso aussieht
+wie ein Konto ohne Daten – bei Auftragswerten und Rechnungen ein schlechter
+Anfangsverdacht.
+
+Nach dem Speichern wird die geänderte Zeile lokal ersetzt (`ersetzeInListe`),
+statt die ganze Tabelle erneut zu holen: die Antwort liegt durch `.select()`
+ohnehin schon vor.
+
+Die Datensicherung in den Einstellungen legt Abos, To-Dos, Notizen, Projekte und
+das Profil als eine JSON-Datei auf dem Gerät ab. Kein Serveraufruf – gesichert
+wird, was geladen ist. Gedacht als Ausweg, falls das Supabase-Projekt einmal
+nicht erreichbar ist; es ist **kein verschlüsseltes Backup**, die Datei liegt im
+Klartext (auch die Notizen, die in der App hinter dem PIN liegen).
+
 ## Sprachnotiz
 
 Aufnehmen, mitschreiben lassen, einordnen – und erst nach Bestätigung

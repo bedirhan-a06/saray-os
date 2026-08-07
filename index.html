@@ -195,6 +195,20 @@
       </div>
     </div>
 
+    <!-- Überfälliges steht vor der Agenda: es verlangt eine Handlung, keine
+         Kenntnisnahme. Die reinen Zahlen-Panels sitzen unter der Agenda,
+         sonst schieben sie bei voller Nutzung genau das nach unten, wofür
+         dieser Tab da ist. -->
+    <div id="overdue-banner" class="overdue-panel hidden"></div>
+
+    <div class="section-head"><h2 id="agenda-titel">Nächste 7 Tage</h2><span class="head-date" id="agenda-date"></span></div>
+    <div class="chip-row" id="agenda-view-toggle">
+      <button class="chip active" data-view="liste">Liste</button>
+      <button class="chip" data-view="monat">Monat</button>
+    </div>
+    <div class="agenda list" id="agenda-container"></div>
+    <div class="monat hidden" id="monat-container"></div>
+
     <div class="einnahmen hidden" id="einnahmen-panel"></div>
 
     <div class="budget-bar hidden" id="budget-bar">
@@ -206,16 +220,7 @@
       <div class="budget-hint hidden" id="budget-hint">Budget überschritten</div>
     </div>
 
-    <div id="overdue-banner" class="overdue-panel hidden"></div>
     <div id="savings-banner" class="hint-banner hidden"></div>
-
-    <div class="section-head"><h2 id="agenda-titel">Nächste 7 Tage</h2><span class="head-date" id="agenda-date"></span></div>
-    <div class="chip-row" id="agenda-view-toggle">
-      <button class="chip active" data-view="liste">Liste</button>
-      <button class="chip" data-view="monat">Monat</button>
-    </div>
-    <div class="agenda list" id="agenda-container"></div>
-    <div class="monat hidden" id="monat-container"></div>
   </section>
 
   <!-- ===== Tab: Projekte ===== -->
@@ -373,6 +378,17 @@
           <div class="desc">Leer lassen = kein Limit</div>
         </div>
         <input type="number" id="set-budget" min="0" step="1" placeholder="z. B. 150">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>Datensicherung</h3>
+      <div class="setting-row">
+        <div>
+          Alles sichern
+          <div class="desc">Abos, To-Dos, Notizen und Projekte als Datei auf dieses Gerät</div>
+        </div>
+        <button class="btn" id="backup-btn">Sichern</button>
       </div>
     </div>
 

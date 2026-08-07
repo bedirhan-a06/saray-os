@@ -37,6 +37,10 @@ let editingNoteId = null;
 let activeNoteTag = "Alle";
 let projects = [];
 let editingProjectId = null;
+// Ein fehlgeschlagenes Laden soll nicht wie ein leeres Konto aussehen – vor
+// allem nicht bei Auftragswerten und Rechnungen. Die render*-Funktionen lesen
+// diese Flags, um bei leerer Liste zwischen „nichts da" und „Fehler" zu unterscheiden.
+let subsFehler = false, todosFehler = false, notesFehler = false, projectsFehler = false;
 let activeProjectKind = "Alle";
 let authMode = "login"; // 'login' | 'register'
 let activeCat = "Alle";
@@ -189,6 +193,34 @@ function iconHTML(s) {
   const color = b ? b.tone : (CATEGORIES[s.category] || CATEGORIES.Sonstige);
   return `<div class="icon mark" style="--brand:${color}">${esc(b ? b.text : initials(s.name))}</div>`;
 }
+/* ---- Fenster auf und zu ----
+   Aufgehen war schon immer weich (fadeIn/slideUp), Zugehen sprang dagegen hart
+   auf display:none. Der Bruch fiel bei einem der meistbenutzten Elemente auf,
+   also läuft das Schließen jetzt dieselbe Bewegung rückwärts ab. */
+const OVERLAY_SCHLIESS_MS = 200;
+
+function oeffneOverlay(id) {
+  const el = $(id);
+  el.classList.remove("schliesst");   // ein noch laufendes Zugehen abbrechen
+  el.classList.add("open");
+}
+
+function schliesseOverlay(id) {
+  const el = $(id);
+  if (!el.classList.contains("open")) return;
+  el.classList.add("schliesst");
+  const fertig = () => {
+    // Wurde in der Zwischenzeit wieder geöffnet, steht die Klasse nicht mehr –
+    // dann darf hier nichts weggenommen werden.
+    if (el.classList.contains("schliesst")) el.classList.remove("open", "schliesst");
+  };
+  // Zwei Wege zum selben Ziel: normalerweise meldet sich die Animation selbst.
+  // Liegt die App im Hintergrund, läuft sie gar nicht erst – dann greift der
+  // Wecker, damit kein Fenster offen stehen bleibt.
+  el.addEventListener("animationend", fertig, { once: true });
+  setTimeout(fertig, OVERLAY_SCHLIESS_MS + 60);
+}
+
 function showToast(msg) {
   const t = $("toast");
   t.textContent = msg;
@@ -567,10 +599,10 @@ function openPwDialog() {
   $("pw-new").value = "";
   $("pw-again").value = "";
   $("pw-error").textContent = "";
-  $("pw-overlay").classList.add("open");
+  oeffneOverlay("pw-overlay");
   setTimeout(() => $("pw-new").focus(), 60);
 }
-function closePwDialog() { $("pw-overlay").classList.remove("open"); }
+function closePwDialog() { schliesseOverlay("pw-overlay"); }
 
 async function savePw() {
   const neu = $("pw-new").value;
@@ -604,10 +636,10 @@ $("pw-again").addEventListener("keydown", (e) => { if (e.key === "Enter") savePw
 function openMailDialog() {
   $("mail-new").value = "";
   $("mail-error").textContent = "";
-  $("mail-overlay").classList.add("open");
+  oeffneOverlay("mail-overlay");
   setTimeout(() => $("mail-new").focus(), 60);
 }
-function closeMailDialog() { $("mail-overlay").classList.remove("open"); }
+function closeMailDialog() { schliesseOverlay("mail-overlay"); }
 
 async function saveMail() {
   const email = $("mail-new").value.trim();
@@ -642,13 +674,13 @@ async function enterApp() {
   $("auth-view").classList.add("hidden");
   $("app-view").classList.remove("hidden");
   $("acct-email").textContent = user.email;
-  await loadProfile();
-  await loadSubs();
-  await loadTodos();
-  await loadNotes();
-  await loadProjects();
-  await loadGoogleFeed();
+  zeigeLadeGeruest(true);
+  // Die sechs Abrufe hängen nicht voneinander ab – nacheinander summierte sich
+  // ihre Wartezeit bei jedem App-Start. Nur loadGoogleEvents() braucht den Feed
+  // und läuft deshalb erst danach.
+  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadGoogleFeed()]);
   await loadGoogleEvents();
+  zeigeLadeGeruest(false);
   bindSettingsUI();
   renderAll();
   zeigeTabAn($("tab-" + activeTab));   // beim Start zieht die Übersicht einmal auf
@@ -666,17 +698,38 @@ async function loadProfile() {
   if (error) console.warn(error);
 }
 
-async function loadSubs() {
-  const { data, error } = await db.from("subscriptions").select("*").order("next_payment");
-  if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
-  // numeric/int kommen als String aus PostgREST – einmal beim Laden sauber machen
-  subs = (data || []).map((s) => ({
+// numeric/int kommen als String aus PostgREST – einmal beim Eintreffen sauber machen
+function normalisiereAbo(s) {
+  return {
     ...s,
     price: Number(s.price),
     cycle_months: Number(s.cycle_months),
     shared_with_count: Number(s.shared_with_count) || 1,
     vat_percent: Number(s.vat_percent) || 0
-  }));
+  };
+}
+
+/* ---- Lokal nachziehen statt neu laden ----
+   Nach dem Speichern die eine geänderte Zeile lokal ersetzen, statt die ganze
+   Tabelle erneut zu holen. Vorbild ist toggleTodo(), das sich dadurch spürbar
+   sofort anfühlt – der Rest der App wartete bisher unnötig auf einen zweiten
+   Serveraufruf, dessen Antwort schon vorlag. */
+function ersetzeInListe(liste, zeile) {
+  const i = liste.findIndex((x) => x.id === zeile.id);
+  if (i === -1) liste.unshift(zeile); else liste[i] = zeile;
+}
+function entferneAusListe(liste, id) {
+  const i = liste.findIndex((x) => x.id === id);
+  if (i !== -1) liste.splice(i, 1);
+}
+
+async function loadSubs() {
+  const { data, error } = await db.from("subscriptions").select("*").order("next_payment");
+  // Bestehende Daten stehen lassen: ein Nachlade-Fehler soll nicht die Liste
+  // leeren, die eben noch da war.
+  if (error) { subsFehler = true; console.error(error); return; }
+  subsFehler = false;
+  subs = (data || []).map(normalisiereAbo);
   const ids = subs.map((s) => s.id);
   history = {};
   if (ids.length) {
@@ -689,21 +742,61 @@ async function loadSubs() {
 
 async function loadTodos() {
   const { data, error } = await db.from("todos").select("*").order("due_date", { ascending: true, nullsFirst: false });
-  if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
+  if (error) { todosFehler = true; console.error(error); return; }
+  todosFehler = false;
   todos = data || [];
 }
 
 async function loadNotes() {
   const { data, error } = await db.from("notes").select("*").order("created_at", { ascending: false });
-  if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
+  if (error) { notesFehler = true; console.error(error); return; }
+  notesFehler = false;
   notes = data || [];
 }
 
 async function loadProjects() {
   const { data, error } = await db.from("projects").select("*").order("created_at", { ascending: false });
-  if (error) { showToast("Fehler beim Laden"); console.error(error); return; }
+  if (error) { projectsFehler = true; console.error(error); return; }
+  projectsFehler = false;
   projects = data || [];
 }
+
+/* ---- Ladezustand und Fehlerzustand ----
+   Beim Start stand die App leer da, bis alle Abrufe durch waren – ohne dass
+   irgendwas erklärte, warum. Und ein fehlgeschlagener Abruf sah danach genauso
+   aus wie ein leeres Konto. Beides bekommt hier eine eigene Darstellung. */
+
+// Graue Platzhalter-Karten, solange die Daten unterwegs sind
+function zeigeLadeGeruest(an) {
+  const geruest = `<div class="skeleton-list">${
+    Array.from({ length: 3 }, () => `<div class="skeleton-card"></div>`).join("")}</div>`;
+  ["agenda-container", "cards-container", "todos-container", "notes-container", "projects-container"]
+    .forEach((id) => { const el = $(id); if (el && an) el.innerHTML = geruest; });
+  $("app-view").classList.toggle("laedt", an);
+}
+
+// Statt des normalen Leertexts, wenn der Abruf gescheitert ist
+function fehlerHTML(bereich) {
+  return `<div class="empty fehler">
+    <svg class="empty-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg>
+    Konnte nicht geladen werden.
+    <button class="btn" data-neuladen="${bereich}">Erneut versuchen</button>
+  </div>`;
+}
+
+// Einen Bereich neu abrufen, ohne die ganze App neu zu starten
+async function ladeBereichNeu(bereich) {
+  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects }[bereich];
+  if (!lader) return;
+  await lader();
+  renderAll();
+}
+
+// Ein Fänger für alle Wiederholen-Knöpfe – sie entstehen erst beim Rendern
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest?.("[data-neuladen]");
+  if (btn) ladeBereichNeu(btn.dataset.neuladen);
+});
 
 /* ---- Google-Kalender ----
    Die private iCal-Adresse liegt RLS-geschützt in google_calendar_feeds.
@@ -903,12 +996,12 @@ async function markPaid(id) {
   const s = subs.find((x) => x.id === id);
   if (!s) return;
   const next = nextDueDate(s);
-  const { error } = await db.from("subscriptions")
+  const { data, error } = await db.from("subscriptions")
     .update({ next_payment: toDateStr(next), updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id).select().single();
   if (error) { showToast("Fehler beim Speichern"); console.error(error); return; }
   showToast(`${s.name}: nächste Zahlung ${fmtDate(next)}`);
-  await loadSubs();
+  ersetzeInListe(subs, normalisiereAbo(data));
   renderAll();
 }
 
@@ -1046,7 +1139,11 @@ function renderAgenda() {
   if (!box) return;
   const items = agendaItems();
   if (!items.length) {
-    box.innerHTML = leerHTML(`In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig.`);
+    // Die Agenda speist sich aus drei Quellen – ist eine davon nicht angekommen,
+    // ist „nichts fällig" schlicht nicht wahr.
+    box.innerHTML = (subsFehler || todosFehler || projectsFehler)
+      ? fehlerHTML(subsFehler ? "abos" : todosFehler ? "todos" : "projekte")
+      : leerHTML(`In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig.`);
     return;
   }
   box.innerHTML = items.map(agendaRowHTML).join("");
@@ -1244,7 +1341,9 @@ function renderCards() {
   if (activeCat !== "Alle") list = list.filter((s) => s.category === activeCat);
   container.innerHTML = list.length
     ? list.map((s) => cardHTML(s, false)).join("")
-    : leerHTML(`Noch keine Abos${activeCat !== "Alle" ? " in dieser Kategorie" : ""} – tipp unten rechts auf „+“.`);
+    : subsFehler
+      ? fehlerHTML("abos")
+      : leerHTML(`Noch keine Abos${activeCat !== "Alle" ? " in dieser Kategorie" : ""} – tipp unten rechts auf „+“.`);
   container.querySelectorAll(".card").forEach((el) => {
     const id = el.dataset.id;
     el.querySelector(".edit")?.addEventListener("click", () => openModal(id));
@@ -1369,10 +1468,10 @@ function openModal(id) {
   }
   refreshPreview();
   refreshVatHint();
-  $("overlay").classList.add("open");
+  oeffneOverlay("overlay");
   setTimeout(() => $("f-name").focus(), 60);
 }
-function closeModal() { $("overlay").classList.remove("open"); editingId = null; }
+function closeModal() { schliesseOverlay("overlay"); editingId = null; }
 
 /* Zeigt live, wie das Abo in der Liste aussehen wird */
 function refreshPreview() {
@@ -1435,18 +1534,23 @@ $("submit-btn").addEventListener("click", async () => {
     if (editingId) {
       const old = subs.find((s) => s.id === editingId);
       if (old && Number(old.price) !== price) {
-        await db.from("price_history").insert({ subscription_id: editingId, user_id: user.id, old_price: old.price, new_price: price });
+        const { data: hist } = await db.from("price_history")
+          .insert({ subscription_id: editingId, user_id: user.id, old_price: old.price, new_price: price })
+          .select().single();
+        // Neueste zuerst – dieselbe Reihenfolge, die loadSubs() vom Server holt
+        if (hist) (history[editingId] = history[editingId] || []).unshift(hist);
       }
-      const { error } = await db.from("subscriptions").update(row).eq("id", editingId);
+      const { data, error } = await db.from("subscriptions").update(row).eq("id", editingId).select().single();
       if (error) throw error;
+      ersetzeInListe(subs, normalisiereAbo(data));
       showToast("Aktualisiert");
     } else {
-      const { error } = await db.from("subscriptions").insert({ ...row, user_id: user.id });
+      const { data, error } = await db.from("subscriptions").insert({ ...row, user_id: user.id }).select().single();
       if (error) throw error;
+      ersetzeInListe(subs, normalisiereAbo(data));
       showToast("Hinzugefügt");
     }
     closeModal();
-    await loadSubs();
     renderAll();
   } catch (err) {
     console.error(err);
@@ -1457,10 +1561,11 @@ $("submit-btn").addEventListener("click", async () => {
 });
 
 async function setArchived(id, archived) {
-  const { error } = await db.from("subscriptions").update({ archived, updated_at: new Date().toISOString() }).eq("id", id);
+  const { data, error } = await db.from("subscriptions")
+    .update({ archived, updated_at: new Date().toISOString() }).eq("id", id).select().single();
   if (error) { showToast(archived ? "Fehler beim Archivieren" : "Fehler beim Reaktivieren"); return; }
   showToast(archived ? "Archiviert" : "Reaktiviert");
-  await loadSubs();
+  ersetzeInListe(subs, normalisiereAbo(data));
   renderAll();
 }
 
@@ -1471,7 +1576,8 @@ async function deleteSub(id) {
   const { error } = await db.from("subscriptions").delete().eq("id", id);
   if (error) { showToast("Fehler beim Löschen"); return; }
   showToast("Gelöscht");
-  await loadSubs();
+  entferneAusListe(subs, id);
+  delete history[id];
   renderAll();
 }
 
@@ -1520,7 +1626,9 @@ function renderTodos() {
   const sorted = sortTodos(visible);
   container.innerHTML = sorted.length
     ? sorted.map(todoRowHTML).join("")
-    : leerHTML("Noch keine To-Dos – trag oben etwas ein.");
+    : todosFehler
+      ? fehlerHTML("todos")
+      : leerHTML("Noch keine To-Dos – trag oben etwas ein.");
   container.querySelectorAll(".todo-row").forEach((el) => {
     const id = el.dataset.id;
     el.querySelector(".todo-check").addEventListener("click", (e) => { e.stopPropagation(); toggleTodo(id); });
@@ -1535,11 +1643,12 @@ async function quickAddTodo() {
   if (!title) return;
   titleEl.disabled = true;
   try {
-    const { error } = await db.from("todos").insert({ user_id: user.id, title, due_date: dateEl.value || null });
+    const { data, error } = await db.from("todos")
+      .insert({ user_id: user.id, title, due_date: dateEl.value || null }).select().single();
     if (error) throw error;
     titleEl.value = "";
     dateEl.value = "";
-    await loadTodos();
+    ersetzeInListe(todos, data);
     renderAll();
   } catch (err) {
     console.error(err);
@@ -1574,7 +1683,7 @@ async function deleteTodo(id) {
   if (error) { showToast("Fehler beim Löschen"); return; }
   closeTodoModal();
   showToast("Gelöscht");
-  await loadTodos();
+  entferneAusListe(todos, id);
   renderAll();
 }
 
@@ -1596,10 +1705,10 @@ function openTodoModal(id) {
     (projektOptionen ? `<optgroup label="Projekte">${projektOptionen}</optgroup>` : "") +
     (aboOptionen ? `<optgroup label="Abos">${aboOptionen}</optgroup>` : "");
   $("todo-f-sub").value = t.project_id ? "p:" + t.project_id : t.subscription_id ? "s:" + t.subscription_id : "";
-  $("todo-overlay").classList.add("open");
+  oeffneOverlay("todo-overlay");
   setTimeout(() => $("todo-f-title").focus(), 60);
 }
-function closeTodoModal() { $("todo-overlay").classList.remove("open"); editingTodoId = null; }
+function closeTodoModal() { schliesseOverlay("todo-overlay"); editingTodoId = null; }
 
 async function saveTodoModal() {
   const title = $("todo-f-title").value.trim();
@@ -1616,11 +1725,11 @@ async function saveTodoModal() {
   const btn = $("todo-save-btn");
   btn.disabled = true;
   try {
-    const { error } = await db.from("todos").update(patch).eq("id", editingTodoId);
+    const { data, error } = await db.from("todos").update(patch).eq("id", editingTodoId).select().single();
     if (error) throw error;
+    ersetzeInListe(todos, data);
     closeTodoModal();
     showToast("Gespeichert");
-    await loadTodos();
     renderAll();
   } catch (err) {
     console.error(err);
@@ -1671,7 +1780,9 @@ function renderNotes() {
   if (activeNoteTag !== "Alle") list = list.filter((n) => extractTags(n.content).includes(activeNoteTag));
   container.innerHTML = list.length
     ? list.map(noteCardHTML).join("")
-    : leerHTML(activeNoteTag !== "Alle" ? "Keine Notizen mit diesem Tag." : "Noch keine Notizen – trag oben etwas ein.");
+    : notesFehler
+      ? fehlerHTML("notizen")
+      : leerHTML(activeNoteTag !== "Alle" ? "Keine Notizen mit diesem Tag." : "Noch keine Notizen – trag oben etwas ein.");
   container.querySelectorAll(".note-card").forEach((el) => {
     el.addEventListener("click", () => openNoteModal(el.dataset.id));
   });
@@ -1683,11 +1794,11 @@ async function quickAddNote() {
   if (!content) return;
   el.disabled = true;
   try {
-    const { error } = await db.from("notes").insert({ user_id: user.id, content });
+    const { data, error } = await db.from("notes").insert({ user_id: user.id, content }).select().single();
     if (error) throw error;
     el.value = "";
     el.style.height = "";
-    await loadNotes();
+    ersetzeInListe(notes, data);
     renderNoteTagFilter();
     renderNotes();
   } catch (err) {
@@ -1711,14 +1822,14 @@ function openNoteModal(id) {
   if (!n) return;
   editingNoteId = id;
   $("note-f-content").value = n.content;
-  $("note-overlay").classList.add("open");
+  oeffneOverlay("note-overlay");
   setTimeout(() => {
     const ta = $("note-f-content");
     ta.focus();
     ta.setSelectionRange(ta.value.length, ta.value.length);
   }, 60);
 }
-function closeNoteModal() { $("note-overlay").classList.remove("open"); editingNoteId = null; }
+function closeNoteModal() { schliesseOverlay("note-overlay"); editingNoteId = null; }
 
 async function saveNoteModal() {
   const content = $("note-f-content").value.trim();
@@ -1726,11 +1837,12 @@ async function saveNoteModal() {
   const btn = $("note-save-btn");
   btn.disabled = true;
   try {
-    const { error } = await db.from("notes").update({ content, updated_at: new Date().toISOString() }).eq("id", editingNoteId);
+    const { data, error } = await db.from("notes")
+      .update({ content, updated_at: new Date().toISOString() }).eq("id", editingNoteId).select().single();
     if (error) throw error;
+    ersetzeInListe(notes, data);
     closeNoteModal();
     showToast("Gespeichert");
-    await loadNotes();
     renderNoteTagFilter();
     renderNotes();
   } catch (err) {
@@ -1749,7 +1861,7 @@ async function deleteNote(id) {
   if (error) { showToast("Fehler beim Löschen"); return; }
   closeNoteModal();
   showToast("Gelöscht");
-  await loadNotes();
+  entferneAusListe(notes, id);
   renderNoteTagFilter();
   renderNotes();
 }
@@ -1904,7 +2016,9 @@ function renderProjects() {
   if (activeProjectKind !== "Alle") list = list.filter((p) => p.kind === activeProjectKind);
   container.innerHTML = list.length
     ? list.map(projectCardHTML).join("")
-    : leerHTML(`Noch keine Projekte${activeProjectKind !== "Alle" ? " dieser Art" : ""} – tipp unten rechts auf „+“.`);
+    : projectsFehler
+      ? fehlerHTML("projekte")
+      : leerHTML(`Noch keine Projekte${activeProjectKind !== "Alle" ? " dieser Art" : ""} – tipp unten rechts auf „+“.`);
   container.querySelectorAll(".project-card").forEach((el) => {
     el.addEventListener("click", () => openProjectModal(el.dataset.id));
     // Der Link soll die Seite öffnen, nicht das Modal
@@ -1943,7 +2057,7 @@ function openProjectModal(id) {
     $("project-f-paid").value = "";
   }
   zeichneGeldFelder();
-  $("project-overlay").classList.add("open");
+  oeffneOverlay("project-overlay");
   setTimeout(() => $("project-f-name").focus(), 60);
 }
 
@@ -1957,7 +2071,7 @@ function zeichneGeldFelder() {
   $("project-feld-bezahlt").classList.toggle("hidden", !bezahlt);
   $("project-geld-daten").classList.toggle("hidden", !rechnung);
 }
-function closeProjectModal() { $("project-overlay").classList.remove("open"); editingProjectId = null; }
+function closeProjectModal() { schliesseOverlay("project-overlay"); editingProjectId = null; }
 
 async function saveProjectModal() {
   const name = $("project-f-name").value.trim();
@@ -1986,16 +2100,17 @@ async function saveProjectModal() {
   btn.disabled = true;
   try {
     if (editingProjectId) {
-      const { error } = await db.from("projects").update(row).eq("id", editingProjectId);
+      const { data, error } = await db.from("projects").update(row).eq("id", editingProjectId).select().single();
       if (error) throw error;
+      ersetzeInListe(projects, data);
       showToast("Gespeichert");
     } else {
-      const { error } = await db.from("projects").insert({ ...row, user_id: user.id });
+      const { data, error } = await db.from("projects").insert({ ...row, user_id: user.id }).select().single();
       if (error) throw error;
+      ersetzeInListe(projects, data);
       showToast("Projekt angelegt");
     }
     closeProjectModal();
-    await loadProjects();
     renderAll();
   } catch (err) {
     console.error(err);
@@ -2014,7 +2129,10 @@ async function deleteProject(id) {
   if (error) { showToast("Fehler beim Löschen"); return; }
   closeProjectModal();
   showToast("Gelöscht");
-  await Promise.all([loadProjects(), loadTodos()]);   // To-Dos neu: project_id wurde serverseitig genullt
+  entferneAusListe(projects, id);
+  // Die Verknüpfung fällt serverseitig weg (FK on delete set null) – hier
+  // dieselbe Wirkung lokal nachziehen, statt alle To-Dos erneut zu holen.
+  todos.forEach((t) => { if (t.project_id === id) t.project_id = null; });
   renderAll();
 }
 $("project-save-btn").addEventListener("click", saveProjectModal);
@@ -2037,7 +2155,7 @@ $("project-overlay").addEventListener("click", (e) => { if (e.target.id === "pro
 // Ein Tipp auf ein #tag – egal wo – zeigt alles, was es trägt: Projekte,
 // To-Dos, Abos, Notizen. Das ist die Querverbindung zwischen den Bausteinen.
 
-function closeTagView() { $("tag-overlay").classList.remove("open"); }
+function closeTagView() { schliesseOverlay("tag-overlay"); }
 
 // Aus der Sammelansicht heraus direkt ins jeweilige Bearbeiten-Fenster
 function openTagRow(art, id) {
@@ -2098,7 +2216,7 @@ function openTagView(tag) {
   body.innerHTML = secs.join("") || leerHTML("Nichts weiter mit diesem Tag.");
   body.querySelectorAll(".tag-row").forEach((el) =>
     el.addEventListener("click", () => openTagRow(el.dataset.art, el.dataset.id)));
-  $("tag-overlay").classList.add("open");
+  oeffneOverlay("tag-overlay");
 }
 
 $("tag-close-btn").addEventListener("click", closeTagView);
@@ -2341,14 +2459,42 @@ $("ics-btn").addEventListener("click", () => {
     );
   });
   lines.push("END:VCALENDAR");
-  const blob = new Blob([lines.map(icsFold).join("\r\n")], { type: "text/calendar" });
+  dateiHerunterladen(new Blob([lines.map(icsFold).join("\r\n")], { type: "text/calendar" }), "sarayos-zahltermine.ics");
+  showToast("Kalender-Datei erstellt");
+});
+
+function dateiHerunterladen(blob, name) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "sarayos-zahltermine.ics";
+  a.href = url;
+  a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  showToast("Kalender-Datei erstellt");
+  URL.revokeObjectURL(url);
+}
+
+/* ================= DATENSICHERUNG =================
+   Alles liegt in einem einzigen Supabase-Projekt. Je mehr hier zusammenläuft,
+   desto teurer wäre ein Verlust – also ein Weg, die Inhalte herauszubekommen.
+   Nur die geladenen Daten, kein Serveraufruf: was auf dem Schirm ist, ist auch
+   in der Datei. */
+$("backup-btn").addEventListener("click", () => {
+  const sicherung = {
+    app: "Saray OS",
+    version: 1,
+    erstellt_am: new Date().toISOString(),
+    konto: user?.email || null,
+    abos: subs,
+    todos,
+    notizen: notes,
+    projekte: projects,
+    profil: profile
+  };
+  const tag = toDateStr(todayMidnight());
+  dateiHerunterladen(new Blob([JSON.stringify(sicherung, null, 2)], { type: "application/json" }), `sarayos-sicherung-${tag}.json`);
+  const anzahl = subs.length + todos.length + notes.length + projects.length;
+  showToast(`${anzahl} Einträge gesichert`);
 });
 
 /* ================= BENACHRICHTIGUNGEN ================= */
@@ -2603,7 +2749,7 @@ function oeffneSprachBestaetigung(daten) {
   sprachTyp = ["todo", "note", "subscription", "project"].includes(daten.type) ? daten.type : "note";
   $("voice-transkript").textContent = `„${daten.text}"`;
   zeichneSprachTyp();
-  $("voice-overlay").classList.add("open");
+  oeffneOverlay("voice-overlay");
 }
 
 function zeichneSprachTyp() {
@@ -2628,7 +2774,7 @@ function zeichneSprachTyp() {
 }
 
 function schliesseSprachBestaetigung() {
-  $("voice-overlay").classList.remove("open");
+  schliesseOverlay("voice-overlay");
   sprachDaten = null;
 }
 
@@ -2640,22 +2786,23 @@ async function speichereSprachnotiz() {
     if (sprachTyp === "todo") {
       const titel = $("voice-f-title").value.trim();
       if (!titel) { showToast("Bitte einen Titel eingeben"); return; }
-      const { error } = await db.from("todos").insert({
+      const { data, error } = await db.from("todos").insert({
         user_id: user.id, title: titel, due_date: $("voice-f-date").value || null
-      });
+      }).select().single();
       if (error) throw error;
+      ersetzeInListe(todos, data);
       schliesseSprachBestaetigung();
-      await loadTodos();
       renderAll();
       showToast("To-Do gespeichert");
 
     } else if (sprachTyp === "note") {
       const inhalt = $("voice-f-content").value.trim();
       if (!inhalt) { showToast("Notiz ist leer"); return; }
-      const { error } = await db.from("notes").insert({ user_id: user.id, content: inhalt });
+      const { data, error } = await db.from("notes")
+        .insert({ user_id: user.id, content: inhalt }).select().single();
       if (error) throw error;
+      ersetzeInListe(notes, data);
       schliesseSprachBestaetigung();
-      await loadNotes();
       renderAll();
       showToast("Notiz gespeichert");
 
