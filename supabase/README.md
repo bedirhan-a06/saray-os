@@ -107,6 +107,27 @@ werden beim Umstellen mit dem heutigen Tag vorbelegt. Wird der Stand
 zurückgesetzt, fallen sie wieder weg – sonst bliebe ein Bezahlt-Datum an einem
 Projekt stehen, das gar nicht mehr als bezahlt gilt.
 
+## Suche
+
+Die Lupe in der Kopfzeile durchsucht Projekte, To-Dos, Abos, Notizen und die
+Google-Termine – rein im Browser, alles liegt ohnehin schon geladen im Speicher.
+Kein Serveraufruf, keine Volltext-Indizes in Postgres.
+
+Aufbau und Darstellung teilt sie sich mit der Tag-Ansicht (`tagRowHTML`,
+`oeffneEintrag`): dieselbe Frage, nur mit Freitext statt `#tag` als Filter.
+Mehrere Wörter gelten als UND. Archivierte Abos und erledigte To-Dos sind
+bewusst dabei – danach sucht man ja gerade.
+
+`normalisiere()` zieht Groß-/Kleinschreibung, Umlaute und türkische Zeichen
+glatt, damit „izmir" auch „İzmir" findet. Alle Ersetzungen sind 1:1, damit die
+Zeichenpositionen erhalten bleiben und `hervorheben()` die Fundstellen an der
+richtigen Stelle markiert. **Einzige Ausnahme ist ß → ss**: dort verschieben
+sich die Positionen, deshalb prüft `hervorheben()` die Länge und markiert im
+Zweifel gar nicht. „Straße" wird also gefunden, aber nicht hervorgehoben.
+
+Nicht abgedeckt: „Muenchen" findet „München" nicht (Umlaute werden auf den
+Grundbuchstaben abgebildet, nicht auf die ae/oe/ue-Schreibweise).
+
 ## Laden, Fehler, Datensicherung
 
 Beim Start laufen die sechs Abrufe (Profil, Abos, To-Dos, Notizen, Projekte,

@@ -2157,13 +2157,18 @@ $("project-overlay").addEventListener("click", (e) => { if (e.target.id === "pro
 
 function closeTagView() { schliesseOverlay("tag-overlay"); }
 
-// Aus der Sammelansicht heraus direkt ins jeweilige Bearbeiten-Fenster
-function openTagRow(art, id) {
-  closeTagView();
+// Ein Eintrag, vier mögliche Fenster. Tag-Ansicht und Suche teilen sich das Ziel.
+function oeffneEintrag(art, id) {
   if (art === "projekt") openProjectModal(id);
   else if (art === "abo") openModal(id);
   else if (art === "todo") openTodoModal(id);
   else if (art === "note") openNoteModal(id);
+}
+
+// Aus der Sammelansicht heraus direkt ins jeweilige Bearbeiten-Fenster
+function openTagRow(art, id) {
+  closeTagView();
+  oeffneEintrag(art, id);
 }
 
 function tagRowHTML(art, id, symbol, titelHTML, rechts) {
@@ -2231,6 +2236,151 @@ document.addEventListener("click", (e) => {
   e.stopPropagation();
   openTagView(el.dataset.tag);
 }, true);
+
+/* ================= SUCHE =================
+   Die #tags verbinden die Bausteine schon quer, aber nur, wenn man beim
+   Schreiben an den Tag gedacht hat. Die Suche findet auch alles andere:
+   denselben Aufbau wie die Tag-Ansicht, nur mit Freitext als Filter. */
+
+// Klein schreiben und Umlaute/türkische Zeichen glattziehen, damit „Straße"
+// auch bei „strasse" auftaucht und „İzmir" bei „izmir".
+// Alle Ersetzungen außer ß sind 1:1 und lassen die Zeichenpositionen heil –
+// nur so sitzen die Treffer-Markierungen unten an der richtigen Stelle.
+// ß → ss ist die eine Ausnahme; in solchen Texten wird deshalb gefunden,
+// aber nicht markiert (siehe Längenprüfung in hervorheben()).
+function normalisiere(s) {
+  return String(s ?? "")
+    .replace(/İ/g, "I").replace(/ı/g, "i")
+    .toLowerCase()
+    .replace(/[äàâáã]/g, "a").replace(/[öòôóõ]/g, "o").replace(/[üùûú]/g, "u")
+    .replace(/[éèêë]/g, "e").replace(/[íìîï]/g, "i")
+    .replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ç/g, "c").replace(/ñ/g, "n")
+    .replace(/ß/g, "ss");
+}
+
+// Alle Begriffe müssen vorkommen (UND), egal in welchem der Felder
+function passtAufBegriffe(begriffe, ...felder) {
+  const heu = normalisiere(felder.filter(Boolean).join(" "));
+  return begriffe.every((b) => heu.includes(b));
+}
+
+// Fundstellen im Text markieren. Erst schneiden, dann jedes Stück einzeln
+// escapen – so kann aus dem Inhalt kein Markup entstehen.
+function hervorheben(text, begriffe) {
+  const roh = String(text ?? "");
+  const norm = normalisiere(roh);
+  // Sicherheitsnetz: verschöbe die Normalisierung doch einmal die Positionen,
+  // lieber gar nicht markieren als an der falschen Stelle.
+  if (norm.length !== roh.length) return esc(roh);
+  const stellen = [];
+  begriffe.forEach((b) => {
+    let i = norm.indexOf(b);
+    while (i !== -1 && b) { stellen.push([i, i + b.length]); i = norm.indexOf(b, i + b.length); }
+  });
+  if (!stellen.length) return esc(roh);
+  stellen.sort((a, b) => a[0] - b[0]);
+  // Überlappende Fundstellen verschmelzen, sonst verschachteln sich die <mark>
+  const zusammen = [stellen[0]];
+  for (const [von, bis] of stellen.slice(1)) {
+    const letzte = zusammen[zusammen.length - 1];
+    if (von <= letzte[1]) letzte[1] = Math.max(letzte[1], bis);
+    else zusammen.push([von, bis]);
+  }
+  let aus = "", pos = 0;
+  for (const [von, bis] of zusammen) {
+    aus += esc(roh.slice(pos, von)) + "<mark>" + esc(roh.slice(von, bis)) + "</mark>";
+    pos = bis;
+  }
+  return aus + esc(roh.slice(pos));
+}
+
+function sucheTreffer(eingabe) {
+  const begriffe = normalisiere(eingabe).split(/\s+/).filter(Boolean);
+  if (!begriffe.length) return null;
+  return {
+    begriffe,
+    // Archivierte Abos und erledigte To-Dos bleiben drin – gerade danach sucht
+    // man ja („was war das nochmal, das ich gekündigt hatte?").
+    projekte: sortProjects(projects.filter((p) => passtAufBegriffe(begriffe, p.name, p.note, p.kind, p.status, p.link))),
+    todos: sortTodos(todos.filter((t) => passtAufBegriffe(begriffe, t.title, t.description))),
+    abos: subs.filter((s) => passtAufBegriffe(begriffe, s.name, s.note, s.category)),
+    notizen: notes.filter((n) => passtAufBegriffe(begriffe, n.content)),
+    termine: googleEvents.filter((g) => passtAufBegriffe(begriffe, g.title))
+  };
+}
+
+// Bei mehrzeiligen Notizen die Zeile zeigen, in der der Treffer steckt –
+// sonst steht da die erste Zeile und man sieht nicht, warum es passt.
+function notizAusschnitt(inhalt, begriffe) {
+  const zeilen = String(inhalt || "").split("\n").filter((z) => z.trim());
+  const treffer = zeilen.find((z) => passtAufBegriffe(begriffe, z)) || zeilen[0] || "";
+  return treffer.length > 80 ? treffer.slice(0, 80) + "…" : treffer;
+}
+
+function zeichneSuche() {
+  const box = $("search-results");
+  const erg = sucheTreffer($("search-input").value);
+  if (!erg) {
+    box.innerHTML = `<div class="hint-text">Durchsucht Projekte, To-Dos, Abos, Notizen und Kalender-Termine.</div>`;
+    return;
+  }
+  const b = erg.begriffe;
+  const teile = [];
+
+  if (erg.projekte.length) {
+    teile.push(`<div class="tag-sec-head">Projekte</div>` + erg.projekte.map((p) =>
+      tagRowHTML("projekt", p.id, svgIcon("folder"), hervorheben(p.name, b),
+        `<span class="status-chip ${PROJECT_STATUS_CLASS[p.status] || "st-offen"}">${esc(p.status)}</span>`)
+    ).join(""));
+  }
+  if (erg.todos.length) {
+    teile.push(`<div class="tag-sec-head">To-Dos</div>` + erg.todos.map((t) =>
+      tagRowHTML("todo", t.id, svgIcon("circle"),
+        hervorheben(t.title, b) + (t.completed ? ` <span class="tag-dim">(erledigt)</span>` : ""),
+        t.due_date ? `<span class="next ${dateBadge(t.due_date)[0]}">${dateBadge(t.due_date)[1]}</span>` : "")
+    ).join(""));
+  }
+  if (erg.abos.length) {
+    teile.push(`<div class="tag-sec-head">Abos</div>` + erg.abos.map((s) =>
+      tagRowHTML("abo", s.id, svgIcon("card"),
+        hervorheben(s.name, b) + (s.archived ? ` <span class="tag-dim">(archiviert)</span>` : ""),
+        esc(`${fmt(ownShareMonthly(s))}/M`))
+    ).join(""));
+  }
+  if (erg.notizen.length) {
+    teile.push(`<div class="tag-sec-head">Notizen</div>` + erg.notizen.map((n) =>
+      tagRowHTML("note", n.id, svgIcon("note"), hervorheben(notizAusschnitt(n.content, b), b),
+        esc(kurzDatum(new Date(n.created_at))))
+    ).join(""));
+  }
+  if (erg.termine.length) {
+    // Kalender-Termine gehören Google, nicht der App: anzeigen ja, öffnen nein –
+    // genau wie in der Agenda.
+    teile.push(`<div class="tag-sec-head">Kalender</div>` + erg.termine.map((g) =>
+      `<div class="tag-row ohne-ziel">
+        <div class="tag-row-symbol">${svgIcon("calendar")}</div>
+        <div class="tag-row-body">${hervorheben(g.title, b)}</div>
+        <div class="tag-row-rechts">${esc(kurzDatum(new Date(g.date + "T00:00:00")))}</div>
+      </div>`).join(""));
+  }
+
+  box.innerHTML = teile.join("") || leerHTML("Nichts gefunden.");
+  box.querySelectorAll(".tag-row:not(.ohne-ziel)").forEach((el) =>
+    el.addEventListener("click", () => { schliesseSuche(); oeffneEintrag(el.dataset.art, el.dataset.id); }));
+}
+
+function oeffneSuche() {
+  $("search-input").value = "";
+  zeichneSuche();
+  oeffneOverlay("search-overlay");
+  setTimeout(() => $("search-input").focus(), 60);
+}
+function schliesseSuche() { schliesseOverlay("search-overlay"); }
+
+$("search-btn").addEventListener("click", oeffneSuche);
+$("search-close-btn").addEventListener("click", schliesseSuche);
+$("search-input").addEventListener("input", zeichneSuche);
+$("search-overlay").addEventListener("click", (e) => { if (e.target.id === "search-overlay") schliesseSuche(); });
 
 /* ================= EINSTELLUNGEN ================= */
 /* ---- Einstellungen: Google Kalender ---- */
