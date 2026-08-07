@@ -119,10 +119,10 @@ function svgIcon(name, cls) {
   return `<svg class="ic${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 }
 
-// Leerer Bereich mit der Palast-Kuppel darüber – dasselbe Zeichen wie im Logo
-// und im Übersicht-Tab. Wo nichts ist, steht wenigstens das Haus.
+// Leerer Bereich mit dem Zeichen der App darüber – dasselbe Modul-Raster wie
+// im Logo und im Übersicht-Tab. Wo nichts ist, steht wenigstens das Zeichen.
 function leerHTML(text) {
-  return `<div class="empty"><svg class="empty-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg>${text}</div>`;
+  return `<div class="empty"><svg class="empty-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-module"/></svg>${text}</div>`;
 }
 
 /* ---- Tags: #wort in beliebigem Text wird zum app-weiten Querverweis ---- */
@@ -778,7 +778,7 @@ function zeigeLadeGeruest(an) {
 // Statt des normalen Leertexts, wenn der Abruf gescheitert ist
 function fehlerHTML(bereich) {
   return `<div class="empty fehler">
-    <svg class="empty-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg>
+    <svg class="empty-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-module"/></svg>
     Konnte nicht geladen werden.
     <button class="btn" data-neuladen="${bereich}">Erneut versuchen</button>
   </div>`;

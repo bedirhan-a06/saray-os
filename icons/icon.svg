@@ -4,19 +4,23 @@
       <stop offset="0%" stop-color="#1c2130"/>
       <stop offset="100%" stop-color="#0d0f14"/>
     </linearGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+    <!-- userSpaceOnUse: der Verlauf laeuft ueber alle drei Kacheln hinweg,
+         nicht in jeder einzeln. So bleibt es ein Zeichen, das in Module
+         geschnitten ist – und nicht drei zufaellig benachbarte Rechtecke. -->
+    <linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="116" y1="116" x2="396" y2="396">
       <stop offset="0%" stop-color="#f6e7b0"/>
       <stop offset="45%" stop-color="#d4af37"/>
       <stop offset="100%" stop-color="#a97f1f"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <!-- dome -->
-  <g transform="translate(156,64)">
-    <path d="M0 120 Q0 20 100 10 Q200 20 200 120" fill="none" stroke="url(#gold)" stroke-width="20" stroke-linecap="round"/>
-    <line x1="100" y1="10" x2="100" y2="-26" stroke="url(#gold)" stroke-width="20" stroke-linecap="round"/>
-    <circle cx="100" cy="-44" r="14" fill="url(#gold)"/>
+  <!-- Ein grosser Baustein, zwei kleinere daneben – dasselbe Verhaeltnis,
+       in dem die App ihre Uebersicht aufbaut. Die Rangfolge traegt die
+       Groesse, nicht die Helligkeit: nur so bleiben alle drei Kacheln
+       auch als 60-px-Symbol auf dem Homebildschirm lesbar. -->
+  <g transform="translate(116,116)">
+    <rect x="0" y="0" width="164" height="280" rx="30" fill="url(#gold)"/>
+    <rect x="196" y="0" width="84" height="130" rx="22" fill="url(#gold)"/>
+    <rect x="196" y="150" width="84" height="130" rx="22" fill="url(#gold)"/>
   </g>
-  <!-- AS monogram -->
-  <text x="256" y="420" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="212" font-weight="700" fill="url(#gold)">AS</text>
 </svg>

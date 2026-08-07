@@ -85,7 +85,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .wordmark { text-align: center; margin-bottom: 26px; }
 .wordmark svg { display: block; margin: 0 auto 6px; }
 .wordmark h1 { font-size: 34px; font-weight: 700; letter-spacing: 0.5px; }
-.wordmark .ornament { margin: 7px 0 4px; }
+.wordmark .takt { margin: 11px 0 8px; }
 .wordmark p { color: var(--text-dim); font-size: 13px; }
 .auth-card .field { margin-bottom: 14px; }
 .field label {
@@ -143,7 +143,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .lock-card { width: 100%; max-width: 320px; text-align: center; }
 .lock-card > svg { display: block; margin: 0 auto 8px; }
 .lock-card h1 { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
-.lock-card .ornament { margin: 6px 0 2px; }
+.lock-card .takt { margin: 10px 0 6px; }
 .lock-hint { color: var(--text-dim); font-size: 13.5px; margin-top: 4px; min-height: 19px; }
 
 .pin-dots { display: flex; justify-content: center; gap: 14px; margin: 22px 0 30px; }
@@ -196,7 +196,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
      und muss die Statusleiste daher selbst freihalten. */
   padding: 0
            max(16px, env(safe-area-inset-right))
-           110px
+           122px
            max(16px, env(safe-area-inset-left));
 }
 .app-header {
@@ -226,33 +226,25 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 .app-header .wm h1 { font-size: 22px; font-weight: 700; }
 .app-header .date { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
 
-/* ---------- Palast-Ornamentik ----------
-   Der Sternfries (Rub el Hizb – zwei ineinandergelegte Quadrate) läuft als
-   Kachel durch. Bewusst nur an drei Stellen: den beiden Toren (Anmeldung,
-   Schloss) und als Abschluss der Kopfzeile. Überall sonst wäre es Tapete. */
-.ornament {
-  height: 15px;
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2060%2022%22%20fill%3D%22none%22%20stroke%3D%22%23d4af37%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22butt%22%20stroke-linejoin%3D%22miter%22%3E%20%3Cpath%20d%3D%22M23%2011%20L15%203%20L7%2011%20L15%2019%20Z%22%2F%3E%20%3Cpath%20d%3D%22M20.6569%205.3431%20L9.3431%205.3431%20L9.3431%2016.6569%20L20.6569%2016.6569%20Z%22%2F%3E%20%3Ccircle%20cx%3D%2215%22%20cy%3D%2211%22%20r%3D%221.9%22%2F%3E%20%3Cpath%20d%3D%22M0%2011%20H7%20M23%2011%20H41%20M49%2011%20H60%22%2F%3E%20%3Cpath%20d%3D%22M41%2011%20L45%207%20L49%2011%20L45%2015%20Z%22%2F%3E%20%3C%2Fsvg%3E");
-  background-repeat: repeat-x;
-  background-position: center;
-  background-size: 41px 15px;
-  opacity: 0.34;
-}
-/* Kopfzeile bekommt eine gezierte Unterkante statt einer nackten Linie.
-   Seit die Leiste klebt, sitzt der Fries an ihrer Unterkante statt in der Luft
-   darunter – sonst schwebte er beim Scrollen über dem Inhalt. */
+/* ---------- Taktstrich ----------
+   Loest den frueheren Sternfries ab. Dasselbe Verhaeltnis wie im Zeichen –
+   ein langer Strich, zwei kurze. Rangfolge ueber die Laenge, nicht ueber die
+   Deckkraft: gedimmtes Gold auf dunklem Grund wird olivfarben statt leiser. */
+.takt { display: flex; justify-content: center; align-items: center; gap: 5px; height: 3px; }
+.takt span { height: 3px; border-radius: 2px; background: var(--gold-grad); }
+.takt span:nth-child(1) { width: 24px; }
+.takt span:nth-child(2) { width: 12px; }
+.takt span:nth-child(3) { width: 12px; }
+/* Kopfzeile schliesst mit einer feinen Goldkante ab, die zu den Seiten
+   ausblendet – ruhiger als eine durchgezogene Linie quer durchs Bild. */
 .app-header::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 15px;
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2060%2022%22%20fill%3D%22none%22%20stroke%3D%22%23d4af37%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22butt%22%20stroke-linejoin%3D%22miter%22%3E%20%3Cpath%20d%3D%22M23%2011%20L15%203%20L7%2011%20L15%2019%20Z%22%2F%3E%20%3Cpath%20d%3D%22M20.6569%205.3431%20L9.3431%205.3431%20L9.3431%2016.6569%20L20.6569%2016.6569%20Z%22%2F%3E%20%3Ccircle%20cx%3D%2215%22%20cy%3D%2211%22%20r%3D%221.9%22%2F%3E%20%3Cpath%20d%3D%22M0%2011%20H7%20M23%2011%20H41%20M49%2011%20H60%22%2F%3E%20%3Cpath%20d%3D%22M41%2011%20L45%207%20L49%2011%20L45%2015%20Z%22%2F%3E%20%3C%2Fsvg%3E");
-  background-repeat: repeat-x;
-  background-position: center;
-  background-size: 41px 15px;
-  opacity: 0.13;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.42) 22%, rgba(212, 175, 55, 0.42) 78%, transparent);
   pointer-events: none;
 }
 
@@ -427,7 +419,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   border-radius: var(--radius);
   font-size: 14px;
 }
-/* Die Kuppel aus dem Logo – zurückhaltend, sie soll den Satz nicht überstrahlen */
+/* Das Zeichen der App – zurückhaltend, es soll den Satz nicht überstrahlen */
 .empty-mark {
   width: 30px;
   height: 30px;
@@ -871,6 +863,9 @@ mark {
 .switch input:checked + .slider::before { transform: translateX(19px); background: #14110a; }
 
 /* ---------- Tab-Bar ---------- */
+/* Die Leiste ist selbst ein Modul-Raster: sechs Kacheln, von denen eine
+   groesser ist. Dieselbe Idee wie im Zeichen der App – und der Grund, warum
+   sie nicht wie die Standard-Tableiste jeder anderen App aussieht. */
 .tabbar {
   position: fixed;
   bottom: 0;
@@ -880,28 +875,46 @@ mark {
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--border);
   display: flex;
-  justify-content: space-around;
-  padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+  gap: 4px;
+  padding: 7px max(9px, env(safe-area-inset-right))
+           calc(7px + env(safe-area-inset-bottom)) max(9px, env(safe-area-inset-left));
   z-index: 40;
 }
 .tabbar button {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
-  /* 9px + enge Laufweite: „Einstellungen" ist das längste Wort und passt bei
-     6 Tabs auf 375 px sonst nicht in seine Spalte. */
-  font-size: 9px;
-  letter-spacing: -0.015em;
+  /* Enge Laufweite: „Einstellungen" ist das längste Wort und muss bei
+     6 Kacheln auf 375 px in seine Kachel passen. */
+  font-size: 8.5px;
+  letter-spacing: -0.02em;
   color: var(--text-dim);
   font-weight: 600;
-  /* flex:1 statt fixer min-width – bei 6 Tabs teilen sie sich die Breite,
-     statt auf schmalen Handys über den Rand zu laufen. */
+  /* flex statt fixer Breite: die aktive Kachel waechst, die anderen weichen.
+     Deshalb laeuft nichts ueber den Rand, egal wie schmal das Geraet ist. */
   flex: 1;
   min-width: 0;
-  padding: 0 1px;
+  height: 48px;
+  border-radius: 13px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 0 2px;
+  /* Die Breite wechselt bewusst OHNE Uebergang: bleibt eine flex-grow-Animation
+     haengen (App geht mitten im Tabwechsel in den Hintergrund), behaelt die alte
+     Kachel ihre Breite und es sehen zwei Tabs aktiv aus – eine golden, eine
+     breit. Dieselbe Ueberlegung wie beim FAB und beim Monatsgitter: lieber kein
+     Uebergang als einer, der in einem falschen Zustand einfriert.
+     Die Bewegung traegt hier der Farbwechsel, das reicht. */
+  transition: background 0.22s ease, color 0.22s ease, border-color 0.22s ease;
 }
-.tabbar button.active { color: var(--gold-2); }
+.tabbar button.active {
+  flex-grow: 1.55;
+  background: var(--gold-grad);
+  color: #14110a;
+  border-color: transparent;
+}
 .tabbar button .ti { transition: transform 0.12s ease; }
 .tabbar button:active .ti { transform: scale(0.9); }
 /* Kurzer Hüpfer beim Anwählen – bewusst KEIN Dauerzustand auf .active, sonst
@@ -918,7 +931,7 @@ mark {
 .fab {
   position: fixed;
   right: 18px;
-  bottom: calc(74px + env(safe-area-inset-bottom));
+  bottom: calc(84px + env(safe-area-inset-bottom));
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -1017,7 +1030,7 @@ mark {
 /* ---------- Sprachnotiz ---------- */
 .voice-bar {
   position: fixed;
-  bottom: calc(84px + env(safe-area-inset-bottom));
+  bottom: calc(94px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -1045,7 +1058,7 @@ mark {
 
 .toast {
   position: fixed;
-  bottom: calc(84px + env(safe-area-inset-bottom));
+  bottom: calc(94px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(16px);
   background: var(--panel-2);

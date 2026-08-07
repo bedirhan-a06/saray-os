@@ -19,11 +19,31 @@
 <!-- ================= Icons =================
      Eigene Linien-Icons statt Emojis: gleiche Strichstärke, gleiche Sprache,
      nehmen per currentColor die Farbe ihrer Umgebung an (Gold, wenn aktiv).
-     Das Haus-Icon ist bewusst die Palast-Kuppel aus dem Logo. -->
+     i-module ist das Zeichen der App selbst – ein grosser Baustein, zwei
+     kleinere daneben. Es steht zugleich fuer die Uebersicht, weil dort alle
+     Bausteine zusammenlaufen. -->
 <svg class="sprite" aria-hidden="true">
-  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5.6 20Q5.6 10.4 12 9.6 18.4 10.4 18.4 20"/><path d="M3.4 20h17.2"/>
-    <path d="M12 9.6V7.2"/><circle cx="12" cy="5.8" r="1.15"/>
+  <defs>
+    <!-- userSpaceOnUse: der Verlauf laeuft ueber alle drei Kacheln hinweg,
+         nicht in jeder einzeln – sonst sind es drei Rechtecke statt einem
+         Zeichen, das in Module geschnitten ist. -->
+    <linearGradient id="mark-gold" gradientUnits="userSpaceOnUse" x1="2" y1="2" x2="38" y2="38">
+      <stop offset="0%" stop-color="#f6e7b0"/>
+      <stop offset="45%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#a97f1f"/>
+    </linearGradient>
+  </defs>
+  <!-- Wortmarken-Zeichen (gefuellt, mit Verlauf) -->
+  <symbol id="i-mark" viewBox="0 0 40 40">
+    <rect x="2" y="2" width="21" height="36" rx="6" fill="url(#mark-gold)"/>
+    <rect x="27" y="2" width="11" height="16" rx="4" fill="url(#mark-gold)"/>
+    <rect x="27" y="22" width="11" height="16" rx="4" fill="url(#mark-gold)"/>
+  </symbol>
+  <!-- Dasselbe Zeichen als Linien-Icon, fuer Tab-Leiste und Leerzustaende -->
+  <symbol id="i-module" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+    <rect x="3.2" y="3.4" width="8.6" height="17.2" rx="2.6"/>
+    <rect x="14.8" y="3.4" width="6" height="7.2" rx="2.1"/>
+    <rect x="14.8" y="13.4" width="6" height="7.2" rx="2.1"/>
   </symbol>
   <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M3.2 7.5a2 2 0 0 1 2-2h3.6l2 2.2h8a2 2 0 0 1 2 2v6.8a2 2 0 0 1-2 2H5.2a2 2 0 0 1-2-2Z"/>
@@ -101,19 +121,10 @@
 <div id="auth-view">
   <div class="auth-card">
     <div class="wordmark">
-      <svg width="60" height="44" viewBox="0 0 60 44">
-        <defs>
-          <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#f6e7b0"/><stop offset="50%" stop-color="#d4af37"/><stop offset="100%" stop-color="#a97f1f"/>
-          </linearGradient>
-        </defs>
-        <path d="M14 40 Q14 16 30 14 Q46 16 46 40" fill="none" stroke="url(#wg)" stroke-width="3"/>
-        <line x1="30" y1="14" x2="30" y2="7" stroke="url(#wg)" stroke-width="3"/>
-        <circle cx="30" cy="5" r="2.5" fill="url(#wg)"/>
-      </svg>
+      <svg width="46" height="46" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mark"/></svg>
       <h1 class="serif gold-text">Saray OS</h1>
-      <div class="ornament" aria-hidden="true"></div>
-      <p>Dein Leben. Dein Palast. Alles im Blick.</p>
+      <div class="takt" aria-hidden="true"><span></span><span></span><span></span></div>
+      <p>Alles an einem Ort.</p>
     </div>
     <div class="auth-error" id="auth-error"></div>
     <div class="field">
@@ -134,18 +145,9 @@
 <!-- ================= SCHLOSS ================= -->
 <div id="lock-view" class="hidden">
   <div class="lock-card">
-    <svg width="52" height="38" viewBox="0 0 60 44" aria-hidden="true">
-      <defs>
-        <linearGradient id="wg3" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#f6e7b0"/><stop offset="50%" stop-color="#d4af37"/><stop offset="100%" stop-color="#a97f1f"/>
-        </linearGradient>
-      </defs>
-      <path d="M14 40 Q14 16 30 14 Q46 16 46 40" fill="none" stroke="url(#wg3)" stroke-width="3"/>
-      <line x1="30" y1="14" x2="30" y2="7" stroke="url(#wg3)" stroke-width="3"/>
-      <circle cx="30" cy="5" r="2.5" fill="url(#wg3)"/>
-    </svg>
+    <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mark"/></svg>
     <h1 class="serif gold-text" id="lock-title">Saray OS</h1>
-    <div class="ornament" aria-hidden="true"></div>
+    <div class="takt" aria-hidden="true"><span></span><span></span><span></span></div>
     <div class="lock-hint" id="lock-hint">PIN eingeben</div>
     <div class="pin-dots" id="pin-dots"></div>
     <div class="pin-pad" id="pin-pad"></div>
@@ -157,16 +159,7 @@
 <div id="app-view" class="hidden">
   <header class="app-header">
     <div class="wm">
-      <svg width="30" height="26" viewBox="0 0 60 52">
-        <defs>
-          <linearGradient id="wg2" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#f6e7b0"/><stop offset="50%" stop-color="#d4af37"/><stop offset="100%" stop-color="#a97f1f"/>
-          </linearGradient>
-        </defs>
-        <path d="M14 48 Q14 22 30 20 Q46 22 46 48" fill="none" stroke="url(#wg2)" stroke-width="4"/>
-        <line x1="30" y1="20" x2="30" y2="11" stroke="url(#wg2)" stroke-width="4"/>
-        <circle cx="30" cy="8" r="3" fill="url(#wg2)"/>
-      </svg>
+      <svg width="26" height="26" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mark"/></svg>
       <div>
         <h1 class="serif gold-text">Saray OS</h1>
         <div class="date" id="today-label"></div>
@@ -458,12 +451,15 @@
   <button class="fab hidden" id="add-btn" title="Abo hinzufügen" aria-label="Hinzufügen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
 
   <nav class="tabbar">
-    <button data-tab="home" class="active"><svg class="ti" viewBox="0 0 24 24"><use href="#i-home"/></svg>Übersicht</button>
+    <button data-tab="home" class="active"><svg class="ti" viewBox="0 0 24 24"><use href="#i-module"/></svg>Übersicht</button>
     <button data-tab="projekte"><svg class="ti" viewBox="0 0 24 24"><use href="#i-folder"/></svg>Projekte</button>
     <button data-tab="abos"><svg class="ti" viewBox="0 0 24 24"><use href="#i-card"/></svg>Abos</button>
     <button data-tab="todos"><svg class="ti" viewBox="0 0 24 24"><use href="#i-check"/></svg>To-Dos</button>
     <button data-tab="notes"><svg class="ti" viewBox="0 0 24 24"><use href="#i-note"/></svg>Notizen</button>
-    <button data-tab="settings"><svg class="ti" viewBox="0 0 24 24"><use href="#i-sliders"/></svg>Einstellungen</button>
+    <!-- „Optionen" statt „Einstellungen": das längere Wort passt bei sechs
+         Kacheln auf 375 px nicht in seine Kachel (gemessen 9 px zu breit),
+         und engere Abstände holen nur rund 3 px heraus. -->
+    <button data-tab="settings"><svg class="ti" viewBox="0 0 24 24"><use href="#i-sliders"/></svg>Optionen</button>
   </nav>
 </div>
 
