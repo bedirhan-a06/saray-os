@@ -51,6 +51,14 @@ let activeCat = "Alle";
 let googleFeed = null;    // Zeile aus google_calendar_feeds oder null
 let googleEvents = [];    // Termine aus dem Google-Kalender, fürs Agenda-Fenster
 let events = [];          // eigene Termine (Tabelle events)
+let fitnessTage = [];     // Split-Tage
+let fitnessUebungen = [];
+let fitnessSaetze = [];   // Satz-Log der letzten ~4 Monate
+let fitnessFehler = false;
+let editingUebungId = null, uebungNeuTagId = null;
+let trainingTagId = null; // laufendes Training – reine Sitzungs-Sache
+let trainingWdh = {};     // uebungId -> eingestellte Wdh fuer den naechsten Satz
+let ebenSatz = null, satzTimer = null;
 let editingEventId = null;
 let aktiveApp = null;     // null = Home, sonst kalender|aufgaben|projekte|finanzen|notizen|optionen
 let dismissedSavings = false;
@@ -529,6 +537,7 @@ async function initAuth() {
     }
     if (event === "SIGNED_OUT") {
       user = null; profile = null; subs = []; todos = []; notes = []; projects = []; events = [];
+      fitnessTage = []; fitnessUebungen = []; fitnessSaetze = []; trainingTagId = null;
       googleFeed = null; googleEvents = [];
       assistentVerlauf = [];   // das Gespraech gehoert zur Sitzung, nicht zum Geraet
       localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
@@ -685,7 +694,7 @@ async function enterApp() {
   // Die sechs Abrufe hängen nicht voneinander ab – nacheinander summierte sich
   // ihre Wartezeit bei jedem App-Start. Nur loadGoogleEvents() braucht den Feed
   // und läuft deshalb erst danach.
-  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadEvents(), loadGoogleFeed()]);
+  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadEvents(), loadFitness(), loadGoogleFeed()]);
   await loadGoogleEvents();
   zeigeLadeGeruest(false);
   bindSettingsUI();
@@ -776,6 +785,30 @@ async function loadEvents() {
   events = (data || []).map((ev) => ({ ...ev, time: ev.time ? String(ev.time).slice(0, 5) : null }));
 }
 
+async function loadFitness() {
+  // Vier Monate Satz-Historie reichen der App; die Steigerungslogik braucht
+  // ohnehin nur den Zustand an der Uebung selbst.
+  const seit = toDateStr(new Date(Date.now() - 120 * 864e5));
+  const [t, u, sz] = await Promise.all([
+    db.from("fitness_tage").select("*").order("position"),
+    db.from("fitness_uebungen").select("*").order("position"),
+    db.from("fitness_saetze").select("*").gte("datum", seit).order("datum"),
+  ]);
+  if (t.error || u.error || sz.error) {
+    fitnessFehler = true;
+    console.error(t.error || u.error || sz.error);
+    return;
+  }
+  fitnessFehler = false;
+  fitnessTage = t.data || [];
+  fitnessUebungen = (u.data || []).map((x) => ({
+    ...x,
+    gewicht: x.gewicht == null ? null : Number(x.gewicht),
+    schritt: Number(x.schritt) || 2.5,
+  }));
+  fitnessSaetze = (sz.data || []).map((x) => ({ ...x, gewicht: x.gewicht == null ? null : Number(x.gewicht) }));
+}
+
 /* ---- Ladezustand und Fehlerzustand ----
    Beim Start stand die App leer da, bis alle Abrufe durch waren – ohne dass
    irgendwas erklärte, warum. Und ein fehlgeschlagener Abruf sah danach genauso
@@ -801,7 +834,7 @@ function fehlerHTML(bereich) {
 
 // Einen Bereich neu abrufen, ohne die ganze App neu zu starten
 async function ladeBereichNeu(bereich) {
-  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects, termine: loadEvents }[bereich];
+  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects, termine: loadEvents, fitness: loadFitness }[bereich];
   if (!lader) return;
   await lader();
   renderAll();
@@ -875,6 +908,7 @@ function renderAll() {
   renderNotes();
   renderProjectKindFilter();
   renderProjects();
+  renderFitness();
   // Donut und Balken sind die teuersten Zeichnungen – nur wenn Finanzen offen ist
   if (aktiveApp === "finanzen") renderStats();
 }
@@ -942,6 +976,7 @@ function heuteZeilen() {
   ];
   termineHeute.slice(0, 3).forEach((t) =>
     zeilen.push(`▪ ${esc(t.title)}${t.time ? ` · ${esc(t.time)}` : ""}`));
+  if (fitnessDran()) zeilen.push(`<span class="sig">▪ Gym: ${esc(dranTag().name)} dran</span>`);
   const faellig = overdueSubs();
   if (faellig.length)
     zeilen.push(`<span class="sig">▪ ${faellig.length === 1 ? "Ein Abo wartet auf Bezahlt" : faellig.length + " Abos warten auf Bezahlt"}</span>`);
@@ -988,6 +1023,17 @@ function renderHome() {
   const teile = [`Abos ${fmt(monatlich)}/M`];
   if (z.offen > 0) teile.push(`<span class="${z.aeltesteRechnung >= RECHNUNG_MAHNUNG_TAGE ? "sig" : ""}">${esc(fmt(z.offen))} offen</span>`);
   $("stat-finanzen").innerHTML = teile.join(" · ");
+
+  const fitKachel = $("k-fitness");
+  if (fitKachel) {
+    const dran = fitnessTage.length ? dranTag() : null;
+    const dranJetzt = fitnessDran();
+    fitKachel.classList.toggle("dran", dranJetzt);
+    $("stat-fitness").innerHTML = !fitnessTage.length ? "Coach einrichten"
+      : heuteTrainiert() ? "✓ heute trainiert"
+      : dranJetzt ? `heute dran — ${esc(dran.name)}`
+      : `als Nächstes: ${esc(dran.name)}`;
+  }
 
   $("stat-notizen").textContent = notes.length
     ? (notes[0].content.split("\n")[0].slice(0, 34) || `${notes.length} Notizen`)
@@ -2530,6 +2576,370 @@ function zeitAusText(roh) {
   return { datum, zeit, titel };
 }
 
+/* ================= FITNESS-COACH =================
+   Jede Wiederholung wird eingetragen, der Coach rechnet – regelbasiert,
+   ohne KI-Aufruf, also ohne laufende Kosten. Die Regeln:
+   alle Ziel-Saetze voll geschafft  -> Gewicht sofort um die Schrittweite hoch
+   angefangen, aber nicht geschafft -> Fehlversuch (beim Beenden gezaehlt)
+   zweiter Fehlversuch in Folge     -> Gewicht zwei Schritte runter, neuer Anlauf */
+
+const SPLIT_VORLAGEN = {
+  ppl: { tage: [["Push", ["Bankdrücken", "Schulterdrücken", "Dips"]],
+                ["Pull", ["Latzug", "Rudern", "Bizeps-Curls"]],
+                ["Beine", ["Kniebeugen", "Beinpresse", "Wadenheben"]]] },
+  okuk: { tage: [["Oberkörper", ["Bankdrücken", "Rudern", "Schulterdrücken", "Latzug"]],
+                 ["Unterkörper", ["Kniebeugen", "Beinpresse", "Beinbeuger", "Wadenheben"]]] },
+  gk: { tage: [["Ganzkörper", ["Kniebeugen", "Bankdrücken", "Rudern", "Schulterdrücken"]]] },
+  eigen: { tage: [["Tag 1", []]] },
+};
+
+// Gewichte deutsch: 62,5 kg statt 62.5 kg
+function alsKg(n) { return String(n).replace(".", ",") + " kg"; }
+
+function uebungenZuTag(tagId) {
+  return fitnessUebungen.filter((u) => u.tag_id === tagId).sort((a, b) => a.position - b.position);
+}
+function saetzeHeute(uebungId) {
+  const h = toDateStr(todayMidnight());
+  return fitnessSaetze.filter((s2) => s2.uebung_id === uebungId && s2.datum === h)
+    .sort((a, b) => a.satz_nr - b.satz_nr);
+}
+function letztesDatumZuTag(tagId) {
+  const ids = new Set(uebungenZuTag(tagId).map((u) => u.id));
+  let max = null;
+  fitnessSaetze.forEach((s2) => { if (ids.has(s2.uebung_id) && (!max || s2.datum > max)) max = s2.datum; });
+  return max;
+}
+// Rotation: dran ist der Tag nach dem zuletzt trainierten; nie trainiert -> der erste
+function dranTag() {
+  if (!fitnessTage.length) return null;
+  let letztTag = null, letztDatum = null;
+  fitnessTage.forEach((t2) => {
+    const d = letztesDatumZuTag(t2.id);
+    if (d && (!letztDatum || d > letztDatum)) { letztDatum = d; letztTag = t2; }
+  });
+  if (!letztTag) return fitnessTage[0];
+  const i = fitnessTage.findIndex((t2) => t2.id === letztTag.id);
+  return fitnessTage[(i + 1) % fitnessTage.length];
+}
+function tageSeitTraining() {
+  let max = null;
+  fitnessSaetze.forEach((s2) => { if (!max || s2.datum > max) max = s2.datum; });
+  return max === null ? null : Math.round((todayMidnight() - new Date(max + "T00:00:00")) / 864e5);
+}
+function heuteTrainiert() {
+  const h = toDateStr(todayMidnight());
+  return fitnessSaetze.some((s2) => s2.datum === h);
+}
+// Die gefuellte Signal-Kachel: Plan vorhanden, heute noch nichts, und der
+// letzte Besuch ist zwei Tage oder laenger her (Bedos 3x/Woche-Rhythmus).
+function fitnessDran() {
+  if (!fitnessTage.length) return false;
+  const seit = tageSeitTraining();
+  return !heuteTrainiert() && (seit === null || seit >= 2);
+}
+
+async function splitEinrichten(schluessel) {
+  const v = SPLIT_VORLAGEN[schluessel];
+  if (!v) return;
+  try {
+    for (let p2 = 0; p2 < v.tage.length; p2++) {
+      const [nameT, uebs] = v.tage[p2];
+      const { data: tagRow, error } = await db.from("fitness_tage")
+        .insert({ user_id: user.id, name: nameT, position: p2 }).select().single();
+      if (error) throw error;
+      fitnessTage.push(tagRow);
+      for (let q = 0; q < uebs.length; q++) {
+        const { data: uRow, error: e2 } = await db.from("fitness_uebungen")
+          .insert({ user_id: user.id, tag_id: tagRow.id, name: uebs[q], position: q,
+                    ziel_saetze: 3, ziel_wdh: 8, gewicht: null, schritt: 2.5, fehlversuche: 0 })
+          .select().single();
+        if (e2) throw e2;
+        uRow.gewicht = uRow.gewicht == null ? null : Number(uRow.gewicht);
+        uRow.schritt = Number(uRow.schritt) || 2.5;
+        fitnessUebungen.push(uRow);
+      }
+    }
+    renderFitness();
+    renderHome();
+    showToast("Plan steht — gutes Training");
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Einrichten");
+  }
+}
+
+function renderFitness() {
+  const box = $("fitness-inhalt");
+  if (!box) return;
+  if (fitnessFehler && !fitnessTage.length) { box.innerHTML = fehlerHTML("fitness"); return; }
+  if (!fitnessTage.length) { renderFitnessEinrichtung(box); return; }
+  if (trainingTagId) { renderTraining(box); return; }
+  renderFitnessUebersicht(box);
+}
+
+function renderFitnessEinrichtung(box) {
+  box.innerHTML = `
+    <div class="coach-karte"><div class="coach-titel">Coach</div>
+      <div class="coach-text">Einmal einrichten, dann rechnet der Coach mit: jeder Satz wird
+      gespeichert, und schaffst du alle, schlägt er beim nächsten Mal mehr Gewicht vor.</div></div>
+    <div class="section-head"><h2>Wie trainierst du?</h2></div>
+    <div class="list">
+      <button class="fit-uebung fit-split" data-split="ppl"><span class="fit-uebung-name">Push / Pull / Beine</span><span class="fit-uebung-ziel">3 Tage</span></button>
+      <button class="fit-uebung fit-split" data-split="okuk"><span class="fit-uebung-name">Oberkörper / Unterkörper</span><span class="fit-uebung-ziel">2 Tage</span></button>
+      <button class="fit-uebung fit-split" data-split="gk"><span class="fit-uebung-name">Ganzkörper</span><span class="fit-uebung-ziel">1 Tag</span></button>
+      <button class="fit-uebung fit-split" data-split="eigen"><span class="fit-uebung-name">Eigener Plan</span><span class="fit-uebung-ziel">leer starten</span></button>
+    </div>
+    <div class="hint-text">Übungen, Sätze und Gewichte kannst du danach jederzeit anpassen.</div>`;
+  box.querySelectorAll(".fit-split").forEach((b) =>
+    b.addEventListener("click", () => splitEinrichten(b.dataset.split)));
+}
+
+function renderFitnessUebersicht(box) {
+  const dran = dranTag();
+  const seit = tageSeitTraining();
+  const heute = heuteTrainiert();
+  const coachText = heute
+    ? `Heute schon trainiert – stark. Als Nächstes wäre <b>${esc(dran.name)}</b> dran.`
+    : seit === null
+      ? `Erster Einsatz: heute <b>${esc(dran.name)}</b>. Die Gewichte trägst du im Training ein – ab dann rechnet der Coach.`
+      : `Dran: <b>${esc(dran.name)}</b> · zuletzt trainiert ${seit === 1 ? "gestern" : `vor ${seit} Tagen`}.`;
+  box.innerHTML = `
+    <div class="coach-karte">
+      <div class="coach-titel">Coach</div>
+      <div class="coach-text">${coachText}</div>
+      <div class="chip-row" style="margin:12px 0 0">
+        ${fitnessTage.map((t2) => `<button class="chip ${t2.id === dran.id && !heute ? "active" : ""}" data-start="${t2.id}">${esc(t2.name)} starten</button>`).join("")}
+      </div>
+    </div>
+    ${fitnessTage.map((t2) => {
+      const letzt = letztesDatumZuTag(t2.id);
+      return `
+      <div class="section-head"><h2>${esc(t2.name)}</h2><span class="head-date">${letzt ? `zuletzt ${kurzDatum(new Date(letzt + "T00:00:00"))}` : "noch nie"}</span></div>
+      <div class="list" style="margin-bottom:8px">
+        ${uebungenZuTag(t2.id).map((u) => `
+        <div class="fit-uebung" data-id="${u.id}">
+          <span class="fit-uebung-name">${esc(u.name)}</span>
+          <span class="fit-uebung-ziel">${u.ziel_saetze}×${u.ziel_wdh}${u.gewicht != null ? ` · ${alsKg(u.gewicht)}` : ""}${u.fehlversuche ? ` · <span class="sig">${u.fehlversuche + 1}. Anlauf</span>` : ""}</span>
+        </div>`).join("") || `<div class="hint-text">Noch keine Übungen – leg unten eine an.</div>`}
+        <button class="btn subtle fit-neu" data-tag="${t2.id}">+ Übung</button>
+      </div>`;
+    }).join("")}`;
+  box.querySelectorAll("[data-start]").forEach((b) =>
+    b.addEventListener("click", () => { trainingTagId = b.dataset.start; trainingWdh = {}; renderFitness(); }));
+  box.querySelectorAll(".fit-uebung[data-id]").forEach((el) =>
+    el.addEventListener("click", () => openUebungModal(el.dataset.id)));
+  box.querySelectorAll(".fit-neu").forEach((b) =>
+    b.addEventListener("click", () => openUebungModal(null, b.dataset.tag)));
+}
+
+function renderTraining(box) {
+  const tag = fitnessTage.find((t2) => t2.id === trainingTagId);
+  if (!tag) { trainingTagId = null; renderFitnessUebersicht(box); return; }
+  const uebs = uebungenZuTag(tag.id);
+  box.innerHTML = `
+    <div class="coach-karte">
+      <div class="coach-titel">Training läuft — ${esc(tag.name)}</div>
+      <div class="coach-text">Satz geschafft? Häkchen. Weniger Wiederholungen geschafft? Erst − tippen, dann Häkchen.</div>
+    </div>
+    ${uebs.map((u) => {
+      const gemacht = saetzeHeute(u.id);
+      const naechster = gemacht.length + 1;
+      const wdh = trainingWdh[u.id] ?? u.ziel_wdh;
+      const alleVoll = gemacht.length >= u.ziel_saetze && gemacht.every((s2) => s2.wdh >= u.ziel_wdh);
+      return `
+      <div class="fit-block" data-id="${u.id}">
+        <div class="fit-block-kopf">
+          <span class="fit-block-name">${esc(u.name)}</span>
+          <span class="fit-gewicht"><input type="number" step="0.5" min="0" inputmode="decimal" value="${u.gewicht ?? ""}" placeholder="kg" data-gewicht="${u.id}" aria-label="Gewicht in kg"> kg</span>
+        </div>
+        ${Array.from({ length: u.ziel_saetze }, (_, i) => {
+          const nr = i + 1;
+          const done = gemacht.find((s2) => s2.satz_nr === nr);
+          const aktiv = !done && nr === naechster;
+          return `
+          <div class="fit-satz ${done ? "done" : ""} ${aktiv ? "aktiv" : ""}">
+            <span class="fit-satz-nr">Satz ${nr}</span>
+            ${done ? `<span class="fit-satz-wdh">${done.wdh} Wdh${done.wdh < u.ziel_wdh ? ` <span class="sig">von ${u.ziel_wdh}</span>` : ""}</span>`
+              : aktiv ? `<span class="fit-stepper"><button class="fit-minus" aria-label="Weniger Wiederholungen">−</button><span class="fit-wdh">${wdh}</span><button class="fit-plus" aria-label="Mehr Wiederholungen">+</button></span>`
+              : `<span class="fit-satz-wdh" style="color:var(--text-dim)">${u.ziel_wdh} Wdh</span>`}
+            ${done ? `<span class="todo-check checked"></span>` : aktiv ? `<button class="todo-check fit-check" aria-label="Satz geschafft"></button>` : `<span class="todo-check" style="opacity:.35"></span>`}
+            ${done && ebenSatz === u.id + ":" + nr ? `<span class="zeilen-sweep"></span>` : ""}
+          </div>`;
+        }).join("")}
+        ${alleVoll ? `<div class="coach-hinweis">✓ ${u.ziel_saetze}×${u.ziel_wdh} geschafft — nächstes Mal ${u.gewicht != null ? alsKg(u.gewicht) : "mehr"}</div>` : ""}
+      </div>`;
+    }).join("")}
+    <button class="btn block" id="fit-beenden">Training beenden</button>`;
+
+  box.querySelectorAll("[data-gewicht]").forEach((inp) =>
+    inp.addEventListener("change", async () => {
+      const u = fitnessUebungen.find((x) => x.id === inp.dataset.gewicht);
+      const wert = inp.value === "" ? null : Math.max(0, parseFloat(inp.value));
+      const { data, error } = await db.from("fitness_uebungen")
+        .update({ gewicht: wert, updated_at: new Date().toISOString() }).eq("id", u.id).select().single();
+      if (error) { showToast("Fehler beim Speichern"); return; }
+      data.gewicht = data.gewicht == null ? null : Number(data.gewicht);
+      data.schritt = Number(data.schritt) || 2.5;
+      ersetzeInListe(fitnessUebungen, data);
+    }));
+  box.querySelectorAll(".fit-block").forEach((block) => {
+    const id = block.dataset.id;
+    block.querySelector(".fit-minus")?.addEventListener("click", () => {
+      const u = fitnessUebungen.find((x) => x.id === id);
+      trainingWdh[id] = Math.max(0, (trainingWdh[id] ?? u.ziel_wdh) - 1);
+      block.querySelector(".fit-wdh").textContent = trainingWdh[id];
+    });
+    block.querySelector(".fit-plus")?.addEventListener("click", () => {
+      const u = fitnessUebungen.find((x) => x.id === id);
+      trainingWdh[id] = Math.min(u.ziel_wdh * 2, (trainingWdh[id] ?? u.ziel_wdh) + 1);
+      block.querySelector(".fit-wdh").textContent = trainingWdh[id];
+    });
+    block.querySelector(".fit-check")?.addEventListener("click", () => satzAbhaken(id));
+  });
+  $("fit-beenden").addEventListener("click", beendeTraining);
+}
+
+async function satzAbhaken(uebungId) {
+  const u = fitnessUebungen.find((x) => x.id === uebungId);
+  const gemacht = saetzeHeute(uebungId);
+  const nr = gemacht.length + 1;
+  if (nr > u.ziel_saetze) return;
+  if (u.gewicht == null) { showToast("Erst das Gewicht eintragen"); return; }
+  const wdh = trainingWdh[uebungId] ?? u.ziel_wdh;
+  const { data, error } = await db.from("fitness_saetze")
+    .insert({ user_id: user.id, uebung_id: uebungId, datum: toDateStr(todayMidnight()), satz_nr: nr, gewicht: u.gewicht, wdh })
+    .select().single();
+  if (error) { showToast("Fehler beim Speichern"); console.error(error); return; }
+  data.gewicht = data.gewicht == null ? null : Number(data.gewicht);
+  fitnessSaetze.push(data);
+  delete trainingWdh[uebungId];
+  ebenSatz = uebungId + ":" + nr;
+  clearTimeout(satzTimer);
+  satzTimer = setTimeout(() => { ebenSatz = null; }, 600);
+  // Alle Ziel-Saetze voll geschafft: SOFORT steigern – das ist der Coach-Moment,
+  // die Zeile darunter zeigt direkt das neue Gewicht fuers naechste Mal.
+  const alle = saetzeHeute(uebungId);
+  if (alle.length >= u.ziel_saetze && alle.every((s2) => s2.wdh >= u.ziel_wdh)) {
+    const neu = Math.round((u.gewicht + u.schritt) * 2) / 2;
+    const { data: upd, error: e2 } = await db.from("fitness_uebungen")
+      .update({ gewicht: neu, fehlversuche: 0, updated_at: new Date().toISOString() })
+      .eq("id", uebungId).select().single();
+    if (!e2 && upd) {
+      upd.gewicht = Number(upd.gewicht);
+      upd.schritt = Number(upd.schritt) || 2.5;
+      ersetzeInListe(fitnessUebungen, upd);
+    }
+  }
+  renderFitness();
+  renderHome();
+}
+
+async function beendeTraining() {
+  const uebs = uebungenZuTag(trainingTagId);
+  for (const u of uebs) {
+    const gemacht = saetzeHeute(u.id);
+    const geschafft = gemacht.length >= u.ziel_saetze && gemacht.every((s2) => s2.wdh >= u.ziel_wdh);
+    // Nichts angefasst: kein Urteil. Geschafft: schon beim letzten Satz gesteigert.
+    if (!gemacht.length || geschafft) continue;
+    let patch;
+    if (u.fehlversuche + 1 >= 2 && u.gewicht != null) {
+      const neu = Math.max(u.schritt, Math.round((u.gewicht - 2 * u.schritt) * 2) / 2);
+      patch = { gewicht: neu, fehlversuche: 0 };
+      showToast(`${u.name}: runter auf ${alsKg(neu)} — neuer Anlauf`);
+    } else {
+      patch = { fehlversuche: u.fehlversuche + 1 };
+    }
+    const { data, error } = await db.from("fitness_uebungen")
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", u.id).select().single();
+    if (!error && data) {
+      data.gewicht = data.gewicht == null ? null : Number(data.gewicht);
+      data.schritt = Number(data.schritt) || 2.5;
+      ersetzeInListe(fitnessUebungen, data);
+    }
+  }
+  trainingTagId = null;
+  renderFitness();
+  renderHome();
+  showToast("Training gespeichert");
+}
+
+/* ---- Uebung anlegen/bearbeiten ---- */
+function openUebungModal(id, tagId) {
+  editingUebungId = id || null;
+  uebungNeuTagId = tagId || null;
+  $("uebung-modal-title").textContent = id ? "Übung bearbeiten" : "Übung anlegen";
+  $("uebung-delete-btn").classList.toggle("hidden", !id);
+  const u = id ? fitnessUebungen.find((x) => x.id === id) : null;
+  $("uebung-f-name").value = u ? u.name : "";
+  $("uebung-f-saetze").value = u ? u.ziel_saetze : 3;
+  $("uebung-f-wdh").value = u ? u.ziel_wdh : 8;
+  $("uebung-f-gewicht").value = u && u.gewicht != null ? u.gewicht : "";
+  $("uebung-f-schritt").value = u ? u.schritt : 2.5;
+  oeffneOverlay("uebung-overlay");
+  setTimeout(() => $("uebung-f-name").focus(), 60);
+}
+function closeUebungModal() { schliesseOverlay("uebung-overlay"); editingUebungId = null; uebungNeuTagId = null; }
+
+async function saveUebungModal() {
+  const name = $("uebung-f-name").value.trim();
+  if (!name) { showToast("Bitte einen Namen eingeben"); return; }
+  const saetze = Math.min(10, Math.max(1, parseInt($("uebung-f-saetze").value, 10) || 3));
+  const wdh = Math.min(100, Math.max(1, parseInt($("uebung-f-wdh").value, 10) || 8));
+  const gewicht = $("uebung-f-gewicht").value === "" ? null : Math.max(0, parseFloat($("uebung-f-gewicht").value));
+  const schritt = Math.max(0.5, parseFloat($("uebung-f-schritt").value) || 2.5);
+  const btn = $("uebung-save-btn");
+  btn.disabled = true;
+  try {
+    if (editingUebungId) {
+      const { data, error } = await db.from("fitness_uebungen")
+        .update({ name, ziel_saetze: saetze, ziel_wdh: wdh, gewicht, schritt, updated_at: new Date().toISOString() })
+        .eq("id", editingUebungId).select().single();
+      if (error) throw error;
+      data.gewicht = data.gewicht == null ? null : Number(data.gewicht);
+      data.schritt = Number(data.schritt) || 2.5;
+      ersetzeInListe(fitnessUebungen, data);
+    } else {
+      const position = uebungenZuTag(uebungNeuTagId).length;
+      const { data, error } = await db.from("fitness_uebungen")
+        .insert({ user_id: user.id, tag_id: uebungNeuTagId, name, position,
+                  ziel_saetze: saetze, ziel_wdh: wdh, gewicht, schritt, fehlversuche: 0 })
+        .select().single();
+      if (error) throw error;
+      data.gewicht = data.gewicht == null ? null : Number(data.gewicht);
+      data.schritt = Number(data.schritt) || 2.5;
+      fitnessUebungen.push(data);
+    }
+    closeUebungModal();
+    renderFitness();
+    showToast("Gespeichert");
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteUebung(id) {
+  const u = fitnessUebungen.find((x) => x.id === id);
+  if (!u) return;
+  if (!confirm(`„${u.name}“ samt Historie löschen?`)) return;
+  const { error } = await db.from("fitness_uebungen").delete().eq("id", id);
+  if (error) { showToast("Fehler beim Löschen"); return; }
+  entferneAusListe(fitnessUebungen, id);
+  fitnessSaetze = fitnessSaetze.filter((s2) => s2.uebung_id !== id);
+  closeUebungModal();
+  renderFitness();
+  renderHome();
+  showToast("Gelöscht");
+}
+
+$("uebung-save-btn").addEventListener("click", saveUebungModal);
+$("uebung-cancel-btn").addEventListener("click", closeUebungModal);
+$("uebung-delete-btn").addEventListener("click", () => deleteUebung(editingUebungId));
+$("uebung-overlay").addEventListener("click", (e) => { if (e.target.id === "uebung-overlay") closeUebungModal(); });
+
 /* ================= TERMINE =================
    Eigene Kalender-Eintraege – im Gegensatz zu den Google-Terminen voll
    bearbeitbar. Die Schnelleingabe versteht Tag UND Uhrzeit aus dem Satz. */
@@ -3354,6 +3764,7 @@ $("backup-btn").addEventListener("click", () => {
     notizen: notes,
     projekte: projects,
     termine: events,
+    fitness: { tage: fitnessTage, uebungen: fitnessUebungen, saetze: fitnessSaetze },
     profil: profile
   };
   const tag = toDateStr(todayMidnight());

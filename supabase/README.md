@@ -173,6 +173,28 @@ wird, was geladen ist. Gedacht als Ausweg, falls das Supabase-Projekt einmal
 nicht erreichbar ist; es ist **kein verschlüsseltes Backup**, die Datei liegt im
 Klartext (auch die Notizen, die in der App hinter dem PIN liegen).
 
+## Fitness-Coach (Etappe 2)
+
+Jede Wiederholung wird eingetragen, der Coach rechnet — **regelbasiert, ohne
+KI-Aufruf**, also ohne laufende Kosten. Drei Tabellen: `fitness_tage`
+(Split-Tage), `fitness_uebungen` (Ziel-Sätze/Wdh, aktuelles Gewicht,
+Schrittweite, Fehlversuche in Folge), `fitness_saetze` (Log: Datum, Satz-Nr,
+Gewicht, Wdh). RLS wie überall.
+
+Die Regeln: alle Ziel-Sätze voll geschafft → Gewicht **sofort** um die
+Schrittweite hoch (der Coach-Moment direkt nach dem letzten Häkchen);
+angefangen, aber nicht geschafft → Fehlversuch, gezählt beim „Training
+beenden"; zweiter Fehlversuch in Folge → zwei Schritte runter, neuer Anlauf.
+Übungen, die im Training gar nicht angefasst wurden, bekommen kein Urteil.
+
+Eingerichtet wird in der App selbst (Push/Pull/Beine, OK/UK, Ganzkörper oder
+leer), Übungen/Sätze/Gewichte jederzeit änderbar. „Dran" ist der Tag nach dem
+zuletzt trainierten (Rotation). Die Home-Kachel füllt sich lime und atmet
+langsam, wenn ein Training ansteht (letzter Besuch ≥ 2 Tage her) — die eine
+bewusste ambiente Ausnahme vom Grundsatz „Bewegung nur bei Handlung".
+Der Assistent kennt Übungen/Gewichte und die Trainingstage der letzten drei
+Wochen (assistent v4).
+
 ## Etappe 1: Saray OS als OS
 
 Die App ist kein Tab-Wechsler mehr, sondern ein OS: ein Home-Bildschirm mit

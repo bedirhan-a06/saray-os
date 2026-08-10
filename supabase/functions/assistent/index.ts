@@ -79,7 +79,7 @@ async function kontext(userId: string) {
   const tag = heute();
   const grenze = plusTage(tag, 7);
 
-  const [{ data: subs }, { data: todos }, { data: projects }, { data: profile }, { data: evts }] = await Promise.all([
+  const [{ data: subs }, { data: todos }, { data: projects }, { data: profile }, { data: evts }, { data: fitU }, { data: fitS }] = await Promise.all([
     admin.from("subscriptions").select("name, price, vat_percent, next_payment")
       .eq("user_id", userId).eq("archived", false),
     admin.from("todos").select("title, due_date")
@@ -89,6 +89,10 @@ async function kontext(userId: string) {
     admin.from("profiles").select("display_name, monthly_budget").eq("user_id", userId).maybeSingle(),
     admin.from("events").select("title, date, time")
       .eq("user_id", userId).gte("date", tag).lte("date", grenze).order("date"),
+    admin.from("fitness_uebungen").select("name, gewicht, ziel_saetze, ziel_wdh")
+      .eq("user_id", userId),
+    admin.from("fitness_saetze").select("datum")
+      .eq("user_id", userId).gte("datum", plusTage(tag, -21)),
   ]);
 
   const brutto = (s: { price: unknown; vat_percent: unknown }) =>
@@ -128,6 +132,13 @@ async function kontext(userId: string) {
     termine_7_tage: (evts ?? []).map((ev) => ({
       titel: ev.title, am: ev.date, um: ev.time ? String(ev.time).slice(0, 5) : null,
     })),
+    fitness: {
+      uebungen: (fitU ?? []).map((u) => ({
+        name: u.name, gewicht: u.gewicht == null ? null : Number(u.gewicht),
+        ziel: `${u.ziel_saetze}x${u.ziel_wdh}`,
+      })),
+      trainingstage_letzte_3_wochen: [...new Set((fitS ?? []).map((x) => x.datum))].sort(),
+    },
   };
 }
 
@@ -166,7 +177,7 @@ type Nachricht = { rolle: "nutzer" | "assistent"; text: string };
 async function antworte(verlauf: Nachricht[], daten: Record<string, unknown>, key: string) {
   const system =
     `Du bist der Assistent von Saray OS, Bedos persönlichem Life-OS für Abos, To-Dos, ` +
-    `Notizen und Websaray-Projekte. Du kennst nur die Daten unten, sonst nichts über Bedo.\n\n` +
+    `Notizen, Websaray-Projekte und sein Krafttraining. Du kennst nur die Daten unten, sonst nichts über Bedo.\n\n` +
     `Antworte kurz, in Stichpunkten, kein Geschwafel. Geht die Frage nicht um Bedos Leben ` +
     `oder Websaray, sag das ehrlich und lenk zurück, statt allgemein zu plaudern – du bist kein ` +
     `Ersatz für einen normalen Chat-Assistenten, sondern der Assistent für genau diese App.\n\n` +

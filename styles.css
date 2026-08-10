@@ -1352,3 +1352,91 @@ mark {
 /* ---------- Zahl, die sich meldet, wenn sie sich aendert ---------- */
 .rollt { animation: zahlRein 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2); display: inline-block; }
 @keyframes zahlRein { from { transform: translateY(55%); opacity: 0; } }
+
+/* ============ Fitness-Coach ============ */
+.coach-karte {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--signal);
+  border-radius: 0 14px 14px 0;
+  padding: 13px 15px;
+  margin-bottom: 16px;
+}
+.coach-titel { font-size: 11px; font-weight: 700; color: var(--signal); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.coach-text { font-size: 13.5px; color: var(--text); line-height: 1.55; }
+.coach-text b { color: var(--signal); font-weight: 700; }
+.fit-uebung {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 12px 14px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+}
+.fit-uebung-name { font-weight: 600; font-size: 14.5px; }
+.fit-uebung-ziel { font-size: 12px; color: var(--text-dim); white-space: nowrap; flex-shrink: 0; }
+.fit-neu { align-self: flex-start; font-size: 13px; padding: 6px 4px; }
+.fit-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 13px 14px;
+  margin-bottom: 12px;
+}
+.fit-block-kopf { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.fit-block-name { font-weight: 700; font-size: 15px; }
+.fit-gewicht { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); }
+.fit-gewicht input { width: 76px; padding: 7px 9px; font-size: 14px; text-align: right; }
+.fit-satz {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 9px 11px;
+  margin-bottom: 7px;
+  transition: border-color 0.25s ease, opacity 0.25s ease;
+}
+.fit-satz.aktiv { border-color: var(--signal); }
+.fit-satz.done { opacity: 0.5; }
+.fit-satz-nr { font-size: 12px; color: var(--text-dim); width: 52px; flex-shrink: 0; }
+.fit-satz-wdh { flex: 1; font-size: 13.5px; font-weight: 600; }
+.fit-stepper { flex: 1; display: flex; align-items: center; gap: 12px; }
+.fit-stepper button {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  font-size: 17px;
+  font-weight: 700;
+}
+.fit-wdh { font-size: 14px; font-weight: 700; min-width: 22px; text-align: center; }
+/* Der Coach-Moment: nach dem letzten geschafften Satz poppt die Steigerung auf */
+.coach-hinweis {
+  background: var(--signal);
+  color: #0a0a0a;
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-top: 4px;
+  animation: aufPoppen 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.35);
+}
+@keyframes aufPoppen { from { transform: scale(0.9); opacity: 0; } }
+.fit-satz .zeilen-sweep { border-radius: 11px; }
+
+/* Die gefuellte Signal-Kachel auf dem Home: die EINE ambiente Ausnahme vom
+   Grundsatz "Bewegung nur bei Handlung" – sie ruft ja auch als einzige. */
+.kachel.dran { background: var(--signal); border-color: var(--signal); animation: atmen 3.4s ease-in-out infinite; }
+.kachel.dran .kachel-name { color: #0a0a0a; }
+.kachel.dran .kachel-name .ic { color: #0a0a0a; }
+.kachel.dran .kachel-stat { color: #4a5a15; font-weight: 600; }
+@keyframes atmen { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.013); } }
