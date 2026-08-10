@@ -52,6 +52,9 @@ let googleFeed = null;    // Zeile aus google_calendar_feeds oder null
 let googleEvents = [];    // Termine aus dem Google-Kalender, fürs Agenda-Fenster
 let events = [];          // eigene Termine (Tabelle events)
 let uniModule = [];       // Uni-Module mit Klausurterminen
+let ernEintraege = [];    // Mahlzeiten der letzten Wochen
+let ernFehler = false;
+let editingEssenId = null;
 let uniFehler = false;
 let editingModulId = null;
 let fitnessTage = [];     // Split-Tage
@@ -540,7 +543,7 @@ async function initAuth() {
     }
     if (event === "SIGNED_OUT") {
       user = null; profile = null; subs = []; todos = []; notes = []; projects = []; events = [];
-      fitnessTage = []; fitnessUebungen = []; fitnessSaetze = []; trainingTagId = null; uniModule = [];
+      fitnessTage = []; fitnessUebungen = []; fitnessSaetze = []; trainingTagId = null; uniModule = []; ernEintraege = [];
       googleFeed = null; googleEvents = [];
       assistentVerlauf = [];   // das Gespraech gehoert zur Sitzung, nicht zum Geraet
       localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
@@ -697,7 +700,7 @@ async function enterApp() {
   // Die sechs Abrufe hängen nicht voneinander ab – nacheinander summierte sich
   // ihre Wartezeit bei jedem App-Start. Nur loadGoogleEvents() braucht den Feed
   // und läuft deshalb erst danach.
-  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadEvents(), loadFitness(), loadUni(), loadGoogleFeed()]);
+  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadEvents(), loadFitness(), loadUni(), loadErnaehrung(), loadGoogleFeed()]);
   await loadGoogleEvents();
   zeigeLadeGeruest(false);
   bindSettingsUI();
@@ -795,6 +798,16 @@ async function loadUni() {
   uniModule = (data || []).map((m) => ({ ...m, klausur_um: m.klausur_um ? String(m.klausur_um).slice(0, 5) : null }));
 }
 
+async function loadErnaehrung() {
+  // Sechs Wochen reichen: der Verlauf zeigt sieben Tage, die Chips
+  // speisen sich aus den juengsten Wiederholungen.
+  const seit = toDateStr(new Date(Date.now() - 42 * 864e5));
+  const { data, error } = await db.from("ernaehrung_eintraege").select("*").gte("datum", seit).order("created_at");
+  if (error) { ernFehler = true; console.error(error); return; }
+  ernFehler = false;
+  ernEintraege = data || [];
+}
+
 async function loadFitness() {
   // Vier Monate Satz-Historie reichen der App; die Steigerungslogik braucht
   // ohnehin nur den Zustand an der Uebung selbst.
@@ -844,7 +857,7 @@ function fehlerHTML(bereich) {
 
 // Einen Bereich neu abrufen, ohne die ganze App neu zu starten
 async function ladeBereichNeu(bereich) {
-  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects, termine: loadEvents, fitness: loadFitness, uni: loadUni }[bereich];
+  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects, termine: loadEvents, fitness: loadFitness, uni: loadUni, ernaehrung: loadErnaehrung }[bereich];
   if (!lader) return;
   await lader();
   renderAll();
@@ -920,6 +933,7 @@ function renderAll() {
   renderProjects();
   renderFitness();
   renderUni();
+  renderErnaehrung();
   // Donut und Balken sind die teuersten Zeichnungen – nur wenn Finanzen offen ist
   if (aktiveApp === "finanzen") renderStats();
 }
@@ -1044,6 +1058,12 @@ function renderHome() {
     : kl ? `${kl.tage <= 7 ? `<span class="sig">Klausur ${kl.tage === 0 ? "HEUTE" : kl.tage === 1 ? "morgen" : `in ${kl.tage} T.`}</span>` : `Klausur ${esc(kurzDatum(new Date(kl.m.klausur_am + "T00:00:00")))}`} · ${esc(kl.m.name)}`
     : offeneErgebnisse ? `<span class="sig">${offeneErgebnisse === 1 ? "1 Ergebnis" : offeneErgebnisse + " Ergebnisse"} offen</span>`
     : `${uniModule.filter((m) => m.status === "laeuft").length} Module laufen`;
+
+  const ernZiel = Number(profile?.kcal_ziel) || 0;
+  const ernHeute = ernTageswerte(heuteStr);
+  $("stat-ernaehrung").innerHTML = !ernZiel ? "Ziel festlegen"
+    : !ernHeute.anzahl ? `heute noch nichts · Ziel ${ernZiel.toLocaleString("de-DE")}`
+    : `<span class="${ernHeute.kcal > ernZiel ? "sig" : ""}">${ernHeute.kcal.toLocaleString("de-DE")}</span> / ${ernZiel.toLocaleString("de-DE")} kcal${ernHeute.protein ? ` · ${ernHeute.protein} g` : ""}`;
 
   const fitKachel = $("k-fitness");
   if (fitKachel) {
@@ -2621,6 +2641,225 @@ function zeitAusText(roh) {
   return { datum, zeit, titel };
 }
 
+/* ================= ERNAEHRUNG =================
+   Kalorien und Eiweiss, sonst nichts – mehr Felder heisst mehr Reibung pro
+   Mahlzeit, und Reibung ist der Grund, warum Tracken nach zwei Wochen stirbt.
+   Keine Lebensmittel-Datenbank: der Assistent schaetzt auf Wunsch (Aktion
+   "kalorien" der Edge Function), und die App lernt Bedos eigene Kueche –
+   jede Mahlzeit wird zum Ein-Tap-Chip. Die App zaehlt, sie urteilt nicht:
+   kein Push, keine Heute-Zeile, kein rotes Blinken beim Ueberschreiten. */
+
+function ernTageswerte(datumStr) {
+  let kcal = 0, protein = 0, anzahl = 0;
+  ernEintraege.forEach((e2) => {
+    if (e2.datum !== datumStr) return;
+    kcal += e2.kcal; protein += e2.protein || 0; anzahl++;
+  });
+  return { kcal, protein, anzahl };
+}
+
+// Die Chips: juengste Mahlzeiten, je Name einmal, maximal sechs
+function ernFavoriten() {
+  const gesehen = new Set();
+  const heuteStr = toDateStr(todayMidnight());
+  const heutigeNamen = new Set(ernEintraege.filter((e2) => e2.datum === heuteStr).map((e2) => e2.name.toLowerCase()));
+  const fav = [];
+  for (let i = ernEintraege.length - 1; i >= 0 && fav.length < 6; i--) {
+    const e2 = ernEintraege[i];
+    const k = e2.name.toLowerCase();
+    if (gesehen.has(k) || heutigeNamen.has(k)) continue;
+    gesehen.add(k);
+    fav.push(e2);
+  }
+  return fav;
+}
+
+function renderErnaehrung() {
+  const box = $("ern-inhalt");
+  if (!box) return;
+  if (ernFehler && !ernEintraege.length) { box.innerHTML = fehlerHTML("ernaehrung"); return; }
+  const kcalZiel = Number(profile?.kcal_ziel) || 0;
+  if (!kcalZiel) { renderErnZiele(box); return; }
+  const proteinZiel = Number(profile?.protein_ziel) || 0;
+  const heuteStr = toDateStr(todayMidnight());
+  const heute = ernTageswerte(heuteStr);
+  const kcalPct = Math.min(100, (heute.kcal / kcalZiel) * 100);
+  const proteinPct = proteinZiel ? Math.min(100, (heute.protein / proteinZiel) * 100) : 0;
+  const fav = ernFavoriten();
+  const heutige = ernEintraege.filter((e2) => e2.datum === heuteStr);
+
+  // Sieben-Tage-Verlauf, heute rechts
+  const verlauf = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(todayMidnight()); d.setDate(d.getDate() - (6 - i));
+    const ds = toDateStr(d);
+    return { ds, tag: d.toLocaleDateString("de-DE", { weekday: "short" }).slice(0, 2), kcal: ernTageswerte(ds).kcal };
+  });
+  const maxKcal = Math.max(kcalZiel, ...verlauf.map((v) => v.kcal), 1);
+
+  box.innerHTML = `
+    <div class="ern-tag">
+      <div class="ern-zeile"><span>Heute</span><span><b>${heute.kcal.toLocaleString("de-DE")}</b> / ${kcalZiel.toLocaleString("de-DE")} kcal</span></div>
+      <div class="ern-balken"><div class="ern-fuell ${heute.kcal > kcalZiel ? "ueber" : ""}" style="width:${kcalPct}%"></div></div>
+      ${proteinZiel ? `
+      <div class="ern-zeile" style="margin-top:9px"><span>Eiweiß</span><span><b class="sig">${heute.protein}</b> / ${proteinZiel} g</span></div>
+      <div class="ern-balken"><div class="ern-fuell eiweiss" style="width:${proteinPct}%"></div></div>` : ""}
+    </div>
+    ${fav.length ? `<div class="chip-row">${fav.map((f) =>
+      `<button class="chip" data-fav="${f.id}">${esc(f.name)} · ${f.kcal}</button>`).join("")}</div>` : ""}
+    <div class="ern-form">
+      <input type="text" id="ern-f-name" placeholder="Was hast du gegessen?">
+      <button class="btn subtle" id="ern-schaetzen-btn">Schätzen lassen</button>
+      <div class="coach-karte hidden" id="ern-schaetz-karte">
+        <div class="coach-titel">Assistent schätzt</div>
+        <div class="coach-text" id="ern-schaetz-text"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Kalorien</label><input type="number" id="ern-f-kcal" min="0" step="1" inputmode="numeric" placeholder="650"></div>
+        <div class="field"><label>Eiweiß in g (optional)</label><input type="number" id="ern-f-protein" min="0" step="1" inputmode="numeric" placeholder="40"></div>
+      </div>
+      <button class="btn gold block" id="ern-add-btn">Eintragen</button>
+    </div>
+    ${heutige.length ? `<div class="section-head"><h2>Heute</h2></div>
+    <div class="list">${heutige.map((e2) => `
+      <button class="fit-uebung" data-essen="${e2.id}">
+        <span class="fit-uebung-name">${esc(e2.name)}</span>
+        <span class="fit-uebung-ziel">${e2.kcal} kcal${e2.protein ? ` · ${e2.protein} g` : ""}</span>
+      </button>`).join("")}</div>` : ""}
+    <div class="section-head"><h2>Letzte 7 Tage</h2></div>
+    <div class="ern-verlauf">
+      ${verlauf.map((v) => `
+      <div class="ern-saeule">
+        <div class="ern-saeule-balken"><div class="${v.ds === heuteStr ? "heute" : ""}" style="height:${Math.max(3, (v.kcal / maxKcal) * 100)}%"></div></div>
+        <span>${esc(v.tag)}</span>
+      </div>`).join("")}
+      <div class="ern-ziel-linie" style="bottom:${18 + (kcalZiel / maxKcal) * 72}px"></div>
+    </div>
+    <button class="btn subtle" id="ern-ziele-btn">Ziele ändern</button>`;
+
+  box.querySelectorAll("[data-fav]").forEach((b) => b.addEventListener("click", async () => {
+    const f = ernEintraege.find((x) => x.id === b.dataset.fav);
+    if (!f) return;
+    await essenEintragen(f.name, f.kcal, f.protein);
+  }));
+  box.querySelectorAll("[data-essen]").forEach((el) =>
+    el.addEventListener("click", () => openEssenModal(el.dataset.essen)));
+  $("ern-add-btn").addEventListener("click", async () => {
+    const name = $("ern-f-name").value.trim();
+    const kcal = parseInt($("ern-f-kcal").value, 10);
+    if (!name || !Number.isFinite(kcal)) { showToast("Bitte Name und Kalorien angeben"); return; }
+    const protein = $("ern-f-protein").value === "" ? null : Math.max(0, parseInt($("ern-f-protein").value, 10) || 0);
+    await essenEintragen(name, Math.max(0, kcal), protein);
+  });
+  $("ern-f-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ern-schaetzen-btn").click(); });
+  $("ern-schaetzen-btn").addEventListener("click", schaetzeMahlzeit);
+  $("ern-ziele-btn").addEventListener("click", () => renderErnZiele(box));
+}
+
+function renderErnZiele(box) {
+  box.innerHTML = `
+    <div class="coach-karte"><div class="coach-titel">Ernährung</div>
+      <div class="coach-text">Zwei Zahlen, sonst nichts: dein Tagesziel für Kalorien und Eiweiß.
+      Die App zählt mit – sie erinnert nicht, sie blinkt nicht, sie urteilt nicht.</div></div>
+    <div class="ern-form">
+      <div class="row2">
+        <div class="field"><label>Kalorien am Tag</label><input type="number" id="ern-ziel-kcal" min="500" step="50" inputmode="numeric" placeholder="2800" value="${profile?.kcal_ziel || ""}"></div>
+        <div class="field"><label>Eiweiß in g (optional)</label><input type="number" id="ern-ziel-protein" min="20" step="5" inputmode="numeric" placeholder="150" value="${profile?.protein_ziel || ""}"></div>
+      </div>
+      <button class="btn gold block" id="ern-ziel-save">Los geht's</button>
+    </div>`;
+  $("ern-ziel-save").addEventListener("click", async () => {
+    const kcal = parseInt($("ern-ziel-kcal").value, 10);
+    if (!Number.isFinite(kcal) || kcal < 500) { showToast("Bitte ein Kalorienziel eingeben"); return; }
+    const protein = $("ern-ziel-protein").value === "" ? null : Math.max(20, parseInt($("ern-ziel-protein").value, 10) || 0);
+    await saveProfile({ kcal_ziel: kcal, protein_ziel: protein });
+    renderErnaehrung();
+    renderHome();
+  });
+}
+
+async function essenEintragen(name, kcal, protein) {
+  const { data, error } = await db.from("ernaehrung_eintraege")
+    .insert({ user_id: user.id, datum: toDateStr(todayMidnight()), name, kcal, protein })
+    .select().single();
+  if (error) { showToast("Fehler beim Speichern"); console.error(error); return; }
+  ernEintraege.push(data);
+  renderErnaehrung();
+  renderHome();
+  showToast(`${name} eingetragen`);
+}
+
+// Der einzige Ort in der Ernaehrung, der Geld kostet – Bruchteile eines
+// Cents, und nur wenn der Knopf gedrueckt wird. Schaetzwerte sind grob
+// (±20 %), aber beim Zaehlen zaehlt Konsistenz mehr als Praezision.
+async function schaetzeMahlzeit() {
+  const name = $("ern-f-name").value.trim();
+  if (!name) { showToast("Erst eintippen, was du gegessen hast"); return; }
+  const btn = $("ern-schaetzen-btn");
+  btn.disabled = true;
+  const vorher = btn.textContent;
+  btn.textContent = "Schätzt …";
+  try {
+    const { data, error } = await db.functions.invoke("assistent", { body: { action: "kalorien", mahlzeit: name } });
+    if (error) throw error;
+    if (data?.error || !Number.isFinite(data?.kcal)) throw new Error(data?.error || "keine Schätzung");
+    $("ern-f-kcal").value = data.kcal;
+    if (Number.isFinite(data.protein)) $("ern-f-protein").value = data.protein;
+    const karte = $("ern-schaetz-karte");
+    karte.classList.remove("hidden");
+    $("ern-schaetz-text").innerHTML = `≈ <b>${data.kcal} kcal</b>${Number.isFinite(data.protein) ? ` · ${data.protein} g Eiweiß` : ""}<br><span style="font-size:11px;color:var(--text-dim)">Schätzwert – passe an, bevor du einträgst</span>`;
+  } catch (err) {
+    console.warn("Schätzung:", err);
+    showToast("Schätzung gerade nicht möglich – trag die Werte selbst ein");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = vorher;
+  }
+}
+
+function openEssenModal(id) {
+  const e2 = ernEintraege.find((x) => x.id === id);
+  if (!e2) return;
+  editingEssenId = id;
+  $("essen-f-name").value = e2.name;
+  $("essen-f-kcal").value = e2.kcal;
+  $("essen-f-protein").value = e2.protein ?? "";
+  oeffneOverlay("essen-overlay");
+}
+function closeEssenModal() { schliesseOverlay("essen-overlay"); editingEssenId = null; }
+
+async function saveEssenModal() {
+  const name = $("essen-f-name").value.trim();
+  const kcal = parseInt($("essen-f-kcal").value, 10);
+  if (!name || !Number.isFinite(kcal)) { showToast("Bitte Name und Kalorien angeben"); return; }
+  const protein = $("essen-f-protein").value === "" ? null : Math.max(0, parseInt($("essen-f-protein").value, 10) || 0);
+  const { data, error } = await db.from("ernaehrung_eintraege")
+    .update({ name, kcal: Math.max(0, kcal), protein }).eq("id", editingEssenId).select().single();
+  if (error) { showToast("Fehler beim Speichern"); return; }
+  ersetzeInListe(ernEintraege, data);
+  closeEssenModal();
+  renderErnaehrung();
+  renderHome();
+  showToast("Gespeichert");
+}
+
+async function deleteEssen(id) {
+  const e2 = ernEintraege.find((x) => x.id === id);
+  if (!e2) return;
+  if (!confirm(`„${e2.name}“ wirklich löschen?`)) return;
+  const { error } = await db.from("ernaehrung_eintraege").delete().eq("id", id);
+  if (error) { showToast("Fehler beim Löschen"); return; }
+  entferneAusListe(ernEintraege, id);
+  closeEssenModal();
+  renderErnaehrung();
+  renderHome();
+  showToast("Gelöscht");
+}
+
+$("essen-save-btn").addEventListener("click", saveEssenModal);
+$("essen-cancel-btn").addEventListener("click", closeEssenModal);
+$("essen-delete-btn").addEventListener("click", () => deleteEssen(editingEssenId));
+$("essen-overlay").addEventListener("click", (e) => { if (e.target.id === "essen-overlay") closeEssenModal(); });
+
 /* ================= UNI-PLANER =================
    Ein Modul je Zeile, die Klausur ist der Termin, der zaehlt. Signal ab
    sieben Tagen vor der Klausur – frueher waere Rauschen, spaeter zu spaet.
@@ -4002,6 +4241,7 @@ $("backup-btn").addEventListener("click", () => {
     termine: events,
     fitness: { tage: fitnessTage, uebungen: fitnessUebungen, saetze: fitnessSaetze },
     uni: uniModule,
+    ernaehrung: ernEintraege,
     profil: profile
   };
   const tag = toDateStr(todayMidnight());

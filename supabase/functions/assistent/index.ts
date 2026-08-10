@@ -79,7 +79,7 @@ async function kontext(userId: string) {
   const tag = heute();
   const grenze = plusTage(tag, 7);
 
-  const [{ data: subs }, { data: todos }, { data: projects }, { data: profile }, { data: evts }, { data: fitU }, { data: fitS }, { data: module }] = await Promise.all([
+  const [{ data: subs }, { data: todos }, { data: projects }, { data: profile }, { data: evts }, { data: fitU }, { data: fitS }, { data: module }, { data: essenHeute }, { data: ziele }] = await Promise.all([
     admin.from("subscriptions").select("name, price, vat_percent, next_payment")
       .eq("user_id", userId).eq("archived", false),
     admin.from("todos").select("title, due_date")
@@ -95,6 +95,9 @@ async function kontext(userId: string) {
       .eq("user_id", userId).gte("datum", plusTage(tag, -21)),
     admin.from("uni_module").select("name, status, klausur_am, klausur_um, ergebnis")
       .eq("user_id", userId),
+    admin.from("ernaehrung_eintraege").select("kcal, protein")
+      .eq("user_id", userId).eq("datum", tag),
+    admin.from("profiles").select("kcal_ziel, protein_ziel").eq("user_id", userId).maybeSingle(),
   ]);
 
   const brutto = (s: { price: unknown; vat_percent: unknown }) =>
@@ -145,6 +148,12 @@ async function kontext(userId: string) {
       name: m.name, status: m.status, klausur_am: m.klausur_am,
       klausur_um: m.klausur_um ? String(m.klausur_um).slice(0, 5) : null, ergebnis: m.ergebnis,
     })),
+    ernaehrung_heute: {
+      kcal: (essenHeute ?? []).reduce((s2, x) => s2 + (Number(x.kcal) || 0), 0),
+      protein: (essenHeute ?? []).reduce((s2, x) => s2 + (Number(x.protein) || 0), 0),
+      kcal_ziel: ziele?.kcal_ziel ?? null,
+      protein_ziel: ziele?.protein_ziel ?? null,
+    },
   };
 }
 
@@ -180,10 +189,49 @@ const SCHEMA = {
 
 type Nachricht = { rolle: "nutzer" | "assistent"; text: string };
 
+/* ---------- Kalorien-Schaetzung ----------
+   Der eine Ort, an dem die Ernaehrung Geld kostet: nur auf Knopfdruck, ein
+   winziger Aufruf mit festem Schema. Schaetzwerte sind grob (±20 %) – beim
+   Zaehlen zaehlt Konsistenz mehr als Praezision. */
+
+const KCAL_SCHEMA = {
+  type: "object",
+  properties: {
+    kcal: { type: "integer", description: "Geschaetzte Kalorien der ganzen beschriebenen Mahlzeit" },
+    protein: { type: ["integer", "null"], description: "Geschaetztes Eiweiss in Gramm, null wenn unklar" },
+  },
+  required: ["kcal", "protein"],
+  additionalProperties: false,
+};
+
+async function schaetzeKalorien(mahlzeit: string, key: string) {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content:
+          "Schaetze Kalorien und Eiweiss einer beschriebenen Mahlzeit (typische Portion, " +
+          "deutsche/tuerkische Kueche ist wahrscheinlich). Gib EINE Zahl je Feld, keine Spannen." },
+        { role: "user", content: mahlzeit },
+      ],
+      response_format: { type: "json_schema", json_schema: { name: "kalorien", strict: true, schema: KCAL_SCHEMA } },
+    }),
+  });
+  if (!res.ok) throw new Error("Schaetzung fehlgeschlagen: " + (await res.text()).slice(0, 300));
+  const j = await res.json();
+  const roh = JSON.parse(j.choices[0].message.content);
+  const kcal = saubereZahl(roh.kcal, 0, 10000);
+  const protein = saubereZahl(roh.protein, 0, 500);
+  if (kcal === null) throw new Error("keine brauchbare Schaetzung");
+  return { kcal: Math.round(kcal), protein: protein === null ? null : Math.round(protein) };
+}
+
 async function antworte(verlauf: Nachricht[], daten: Record<string, unknown>, key: string) {
   const system =
     `Du bist der Assistent von Saray OS, Bedos persönlichem Life-OS für Abos, To-Dos, ` +
-    `Notizen, Websaray-Projekte, seine Uni-Module samt Klausuren und sein Krafttraining. Du kennst nur die Daten unten, sonst nichts über Bedo.\n\n` +
+    `Notizen, Websaray-Projekte, seine Uni-Module samt Klausuren, sein Krafttraining und seine Ernährung. Du kennst nur die Daten unten, sonst nichts über Bedo.\n\n` +
     `Antworte kurz, in Stichpunkten, kein Geschwafel. Geht die Frage nicht um Bedos Leben ` +
     `oder Websaray, sag das ehrlich und lenk zurück, statt allgemein zu plaudern – du bist kein ` +
     `Ersatz für einen normalen Chat-Assistenten, sondern der Assistent für genau diese App.\n\n` +
@@ -268,6 +316,16 @@ Deno.serve(async (req) => {
     }
 
     const rumpf = await req.json().catch(() => ({}));
+
+    if (rumpf.action === "kalorien") {
+      const mahlzeit = saubererText(rumpf.mahlzeit, 200);
+      if (!mahlzeit) {
+        return new Response(JSON.stringify({ error: "keine Mahlzeit" }), { status: 400, headers: kopfzeilen });
+      }
+      const key = await openaiKey();
+      return new Response(JSON.stringify(await schaetzeKalorien(mahlzeit, key)), { headers: kopfzeilen });
+    }
+
     const roherVerlauf = Array.isArray(rumpf.nachrichten) ? rumpf.nachrichten : [];
     const verlauf: Nachricht[] = roherVerlauf
       .filter((m: unknown): m is Nachricht =>

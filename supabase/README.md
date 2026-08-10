@@ -173,6 +173,23 @@ wird, was geladen ist. Gedacht als Ausweg, falls das Supabase-Projekt einmal
 nicht erreichbar ist; es ist **kein verschlüsseltes Backup**, die Datei liegt im
 Klartext (auch die Notizen, die in der App hinter dem PIN liegen).
 
+## Ernährung (Etappe 4)
+
+Tabelle `ernaehrung_eintraege` (Datum, Name, kcal, Eiweiß optional) plus
+`kcal_ziel`/`protein_ziel` am Profil. Kalorien und Eiweiß, sonst nichts —
+mehr Felder wäre Reibung, an der Tracken nach zwei Wochen stirbt.
+
+Keine Lebensmittel-Datenbank. Stattdessen: (1) die Assistent-Function hat
+eine zweite Aktion `kalorien` (Mahlzeit rein, {kcal, protein} raus, strict
+Schema, bereinigt) — kostet nur auf Knopfdruck, Bruchteile eines Cents;
+Schätzwerte sind grob (±20 %), aber beim Zählen zählt Konsistenz mehr als
+Präzision. (2) Die App lernt die eigene Küche: jede Mahlzeit wird zum
+Ein-Tap-Chip aus der Historie (dedupliziert, ohne heutige).
+
+Die App zählt, sie urteilt nicht: kein Push, keine Heute-Zeile, kein rotes
+Blinken — über dem Ziel leuchtet still die Zahl. 7-Tage-Verlauf mit
+Ziel-Linie. Der Assistent kennt die Tageswerte (ernaehrung_heute, v6).
+
 ## Uni-Planer (Etappe 3)
 
 Tabelle `uni_module`: Name, Status (läuft/bestanden/durchgefallen),
