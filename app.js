@@ -14,14 +14,18 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 const sitzungsSchluessel = () => Object.keys(localStorage).filter((k) => k.startsWith("sb-"));
 
 /* ---- Konstanten ---- */
+// Farbe = Dringlichkeit, und eine Kategorie ist keine: alle Kategorien
+// tragen dasselbe Grau. Die Unterscheidung leisten Name und Position.
 const CATEGORIES = {
-  Streaming: "#e879a0",
-  Musik: "#7dd3a7",
-  Software: "#7c9eff",
-  Gaming: "#66b6f0",
-  Cloud: "#b9a0f2",
-  Sonstige: "#d4af37"
+  Streaming: "#8a8a8a",
+  Musik: "#8a8a8a",
+  Software: "#8a8a8a",
+  Gaming: "#8a8a8a",
+  Cloud: "#8a8a8a",
+  Sonstige: "#8a8a8a"
 };
+// Donut-Abstufung: der groesste Posten leuchtet, der Rest wird stiller
+const STAT_TOENE = ["#c8f04a", "#a3a3a3", "#7a7a7a", "#585858", "#3e3e3e", "#2e2e2e"];
 const CURRENCY_LOCALE = { EUR: "de-DE", USD: "en-US", CHF: "de-CH", TRY: "tr-TR" };
 
 /* ---- State ---- */
@@ -40,13 +44,15 @@ let editingProjectId = null;
 // Ein fehlgeschlagenes Laden soll nicht wie ein leeres Konto aussehen – vor
 // allem nicht bei Auftragswerten und Rechnungen. Die render*-Funktionen lesen
 // diese Flags, um bei leerer Liste zwischen „nichts da" und „Fehler" zu unterscheiden.
-let subsFehler = false, todosFehler = false, notesFehler = false, projectsFehler = false;
+let subsFehler = false, todosFehler = false, notesFehler = false, projectsFehler = false, eventsFehler = false;
 let activeProjectKind = "Alle";
 let authMode = "login"; // 'login' | 'register'
 let activeCat = "Alle";
-let activeTab = "home";
 let googleFeed = null;    // Zeile aus google_calendar_feeds oder null
 let googleEvents = [];    // Termine aus dem Google-Kalender, fürs Agenda-Fenster
+let events = [];          // eigene Termine (Tabelle events)
+let editingEventId = null;
+let aktiveApp = null;     // null = Home, sonst kalender|aufgaben|projekte|finanzen|notizen|optionen
 let dismissedSavings = false;
 // Merkt sich das eine To-Do, das gerade angetippt wurde. renderAll() baut die
 // Zeilen neu auf – ohne diese Markierung würde der Häkchen-Impuls bei jedem
@@ -100,16 +106,16 @@ function ownShareMonthly(s) { return bruttoPreis(s) / s.cycle_months / (s.shared
 // Gemeinsame Ampel für alles mit Fälligkeitsdatum (Abo-Karten und To-Dos):
 // rot/nah, gelb/mittel, grün/fern. dateStr im Format "YYYY-MM-DD".
 function dateBadge(dateStr) {
-  if (!dateStr) return ["far", "ohne Termin"];
+  if (!dateStr) return ["still", "ohne Termin"];
   const today = todayMidnight();
   const d = new Date(dateStr + "T00:00:00");
   const diff = Math.round((d - today) / 864e5);
-  return diff < 0 ? ["soon", "überfällig"]
-    : diff === 0 ? ["soon", "heute"]
-    : diff === 1 ? ["soon", "morgen"]
-    : diff <= 7 ? ["soon", `in ${diff} Tagen`]
-    : diff <= 21 ? ["mid", `in ${diff} Tagen`]
-    : ["far", `in ${diff} Tagen`];
+  // Keine Ampel mehr: Signal nur, wenn es dich JETZT braucht.
+  // "in 5 Tagen" ist eine Information, keine Warnstufe.
+  return diff < 0 ? ["signal", "überfällig"]
+    : diff === 0 ? ["signal", "heute"]
+    : diff === 1 ? ["still", "morgen"]
+    : ["still", `in ${diff} Tagen`];
 }
 function cycleText(m) { return m === 1 ? "/ Monat" : m === 12 ? "/ Jahr" : `/ ${m} Monate`; }
 function esc(str) { const d = document.createElement("div"); d.textContent = str ?? ""; return d.innerHTML; }
@@ -522,7 +528,7 @@ async function initAuth() {
       await enterApp();
     }
     if (event === "SIGNED_OUT") {
-      user = null; profile = null; subs = []; todos = []; notes = []; projects = [];
+      user = null; profile = null; subs = []; todos = []; notes = []; projects = []; events = [];
       googleFeed = null; googleEvents = [];
       assistentVerlauf = [];   // das Gespraech gehoert zur Sitzung, nicht zum Geraet
       localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
@@ -679,12 +685,12 @@ async function enterApp() {
   // Die sechs Abrufe hängen nicht voneinander ab – nacheinander summierte sich
   // ihre Wartezeit bei jedem App-Start. Nur loadGoogleEvents() braucht den Feed
   // und läuft deshalb erst danach.
-  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadGoogleFeed()]);
+  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadEvents(), loadGoogleFeed()]);
   await loadGoogleEvents();
   zeigeLadeGeruest(false);
   bindSettingsUI();
   renderAll();
-  zeigeTabAn($("tab-" + activeTab));   // beim Start zieht die Übersicht einmal auf
+  kachelnEinzug();   // die Kacheln bauen sich einmal gestaffelt auf
   maybeNotifyDue();
   // Push-Anmeldung bei jedem Start auffrischen – iOS laesst sie still verfallen.
   registerPush().catch((e) => console.warn("Push-Anmeldung:", e));
@@ -762,6 +768,14 @@ async function loadProjects() {
   projects = data || [];
 }
 
+async function loadEvents() {
+  const { data, error } = await db.from("events").select("*").order("date");
+  if (error) { eventsFehler = true; console.error(error); return; }
+  eventsFehler = false;
+  // Postgres liefert time als "14:00:00" – die App rechnet ueberall mit HH:MM
+  events = (data || []).map((ev) => ({ ...ev, time: ev.time ? String(ev.time).slice(0, 5) : null }));
+}
+
 /* ---- Ladezustand und Fehlerzustand ----
    Beim Start stand die App leer da, bis alle Abrufe durch waren – ohne dass
    irgendwas erklärte, warum. Und ein fehlgeschlagener Abruf sah danach genauso
@@ -787,7 +801,7 @@ function fehlerHTML(bereich) {
 
 // Einen Bereich neu abrufen, ohne die ganze App neu zu starten
 async function ladeBereichNeu(bereich) {
-  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects }[bereich];
+  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects, termine: loadEvents }[bereich];
   if (!lader) return;
   await lader();
   renderAll();
@@ -846,8 +860,10 @@ function activeSubs() { return subs.filter((s) => !s.archived); }
 
 function renderAll() {
   renderBegruessung();
+  renderHome();
   renderSummary();
-  renderGeld();
+  renderEinnahmen();
+  renderBudget();
   renderOverdue();
   renderSavingsHint();
   renderAgendaAnsicht();
@@ -859,8 +875,8 @@ function renderAll() {
   renderNotes();
   renderProjectKindFilter();
   renderProjects();
-  // Statistik lebt jetzt im Abos-Tab
-  if (activeTab === "abos") renderStats();
+  // Donut und Balken sind die teuersten Zeichnungen – nur wenn Finanzen offen ist
+  if (aktiveApp === "finanzen") renderStats();
 }
 
 // Kopfzeile: Begrüßung nach Tageszeit statt „Stand: 27.07.2026".
@@ -890,69 +906,103 @@ function renderBegruessung() {
 function renderSummary() {
   const act = activeSubs();
   const monthly = act.reduce((sum, s) => sum + ownShareMonthly(s), 0);
-  $("monthly-total").textContent = fmt(monthly);
-  $("yearly-total").textContent = fmt(monthly * 12);
-  $("open-todo-count").textContent = todos.filter((t) => !t.completed).length;
+  zahlRollen($("monthly-total"), fmt(monthly));
+  zahlRollen($("yearly-total"), fmt(monthly * 12));
 }
 
-/* ---- Geld in einer Zeile ----
-   Einnahmen und Budget waren zwei dauerhaft offene Panels und brauchten
-   zusammen mehr Platz als die Agenda, für die der Tab eigentlich da ist.
-   Jetzt steht oben eine Zeile mit den zwei Zahlen, die täglich zählen –
-   der Rest kommt auf Tippen. */
-const GELD_OFFEN_SCHLUESSEL = "saray.geld-offen";
-// Ab hier gilt eine Rechnung als überfällig – dieselbe Frist, mit der auch der
-// tägliche Rundlauf erinnert (RECHNUNG_FRIST_TAGE in functions/push).
+// Ab hier gilt eine Rechnung als überfällig – dieselbe Frist wie im täglichen
+// Rundlauf (RECHNUNG_FRIST_TAGE in functions/push).
 const RECHNUNG_MAHNUNG_TAGE = 14;
 
-function geldZusammenfassung() {
-  const teile = [];
-  const monatlich = activeSubs().reduce((sum, s) => sum + ownShareMonthly(s), 0);
-  const budget = Number(profile?.monthly_budget);
-  if (monatlich > 0 || budget > 0) {
-    const drueber = budget > 0 && monatlich > budget;
-    teile.push(`<span class="geld-teil${drueber ? " ueber" : ""}">Abos ${esc(fmt(monatlich))}${
-      budget > 0 ? ` von ${esc(fmt(budget))}` : " / M"}</span>`);
-  }
-  // Von den Websaray-Zahlen nur die eine, die gerade etwas von einem will:
-  // offene Rechnung vor eingegangenem Geld vor blosser Aussicht.
+/* ================= HOME: LEBENDE KACHELN =================
+   Der Home-Bildschirm ist der Statusbericht: jede Kachel sagt ihren Stand,
+   bevor man tippt. Signalfarbe gibt es nur, wo etwas Bedo heute braucht –
+   dieselbe Regel wie im ganzen Design. */
+
+// Eine Zahl, die sich ändert, meldet sich kurz, statt stumm zu springen
+function zahlRollen(el, text) {
+  if (!el || el.textContent === text) return;
+  el.textContent = text;
+  el.classList.remove("rollt");
+  void el.offsetWidth;
+  el.classList.add("rollt");
+}
+
+function heuteZeilen() {
+  const heuteStr = toDateStr(todayMidnight());
+  const zeilen = [];
+  const ueberfaellig = todos.filter((t) => !t.completed && t.due_date && t.due_date < heuteStr);
+  ueberfaellig.slice(0, 2).forEach((t) =>
+    zeilen.push(`<span class="sig">▪ ${esc(t.title)} — überfällig</span>`));
+  if (ueberfaellig.length > 2)
+    zeilen.push(`<span class="sig">▪ ${ueberfaellig.length - 2} weitere überfällig</span>`);
+  const termineHeute = [
+    ...events.filter((ev) => ev.date === heuteStr),
+    ...googleEvents.filter((g) => g.date === heuteStr),
+  ];
+  termineHeute.slice(0, 3).forEach((t) =>
+    zeilen.push(`▪ ${esc(t.title)}${t.time ? ` · ${esc(t.time)}` : ""}`));
+  const faellig = overdueSubs();
+  if (faellig.length)
+    zeilen.push(`<span class="sig">▪ ${faellig.length === 1 ? "Ein Abo wartet auf Bezahlt" : faellig.length + " Abos warten auf Bezahlt"}</span>`);
   const z = einnahmenZahlen();
-  if (z.offen > 0) {
-    const alt = z.aeltesteRechnung >= RECHNUNG_MAHNUNG_TAGE;
-    teile.push(`<span class="geld-teil${alt ? " alt" : " offen"}">Websaray ${esc(fmt(z.offen))} offen</span>`);
-  } else if (z.eingegangen > 0) {
-    teile.push(`<span class="geld-teil ein">Websaray ${esc(fmt(z.eingegangen))} diesen Monat</span>`);
-  } else if (z.aussicht > 0) {
-    teile.push(`<span class="geld-teil">Websaray ${esc(fmt(z.aussicht))} in Aussicht</span>`);
-  }
-  return teile.join("");
+  if (z.offen > 0 && z.aeltesteRechnung >= RECHNUNG_MAHNUNG_TAGE)
+    zeilen.push(`<span class="sig">▪ Rechnung ${esc(fmt(z.offen))} — seit ${z.aeltesteRechnung} Tagen offen</span>`);
+  todos.filter((t) => !t.completed && t.due_date === heuteStr).slice(0, 2)
+    .forEach((t) => zeilen.push(`▪ ${esc(t.title)} — heute`));
+  return zeilen.slice(0, 5);
 }
 
-function renderGeld() {
-  const panel = $("geld-panel");
-  if (!panel) return;
-  const zusammen = geldZusammenfassung();
-  panel.classList.toggle("hidden", !zusammen);
-  // Die Details immer mitzeichnen: sonst stünden beim Aufklappen alte Zahlen da
-  renderEinnahmen();
-  renderBudget();
-  if (!zusammen) return;
-  $("geld-zusammenfassung").innerHTML = zusammen;
-  geldAufklappen(localStorage.getItem(GELD_OFFEN_SCHLUESSEL) === "1", true);
+function renderHome() {
+  const heuteInhalt = $("heute-inhalt");
+  if (!heuteInhalt) return;
+  $("heute-titel").textContent = "Heute · " +
+    new Date().toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "short" });
+  const zeilen = heuteZeilen();
+  heuteInhalt.innerHTML = zeilen.length
+    ? zeilen.join("<br>")
+    : `<span class="heute-leer">Nichts drängt heute.</span>`;
+
+  const heuteStr = toDateStr(todayMidnight());
+  const kommende = [
+    ...events.filter((ev) => ev.date >= heuteStr).map((ev) => ({ titel: ev.title, datum: ev.date, zeit: ev.time })),
+    ...googleEvents.filter((g) => g.date >= heuteStr).map((g) => ({ titel: g.title, datum: g.date, zeit: g.time })),
+  ].sort((a, b) => a.datum < b.datum ? -1 : a.datum > b.datum ? 1
+    : String(a.zeit || "99").localeCompare(String(b.zeit || "99")));
+  $("stat-kalender").innerHTML = kommende.length
+    ? `${esc(kurzDatum(new Date(kommende[0].datum + "T00:00:00")))}${kommende[0].zeit ? " " + esc(kommende[0].zeit) : ""} · ${esc(kommende[0].titel)}`
+    : "Keine Termine";
+
+  const offen = todos.filter((t) => !t.completed);
+  const zuSpaet = offen.filter((t) => t.due_date && t.due_date < heuteStr).length;
+  $("stat-aufgaben").innerHTML = offen.length
+    ? `${zuSpaet ? `<span class="sig">${zuSpaet} überfällig</span> · ` : ""}${offen.length} offen`
+    : "Alles erledigt";
+
+  const inArbeit = projects.filter((pr) => pr.status === "in Arbeit").length;
+  const aktiv = projects.filter((pr) => pr.status !== "fertig").length;
+  $("stat-projekte").textContent = aktiv ? `${inArbeit} in Arbeit · ${aktiv} aktiv` : "Keine aktiven";
+
+  const monatlich = activeSubs().reduce((sum, s2) => sum + ownShareMonthly(s2), 0);
+  const z = einnahmenZahlen();
+  const teile = [`Abos ${fmt(monatlich)}/M`];
+  if (z.offen > 0) teile.push(`<span class="${z.aeltesteRechnung >= RECHNUNG_MAHNUNG_TAGE ? "sig" : ""}">${esc(fmt(z.offen))} offen</span>`);
+  $("stat-finanzen").innerHTML = teile.join(" · ");
+
+  $("stat-notizen").textContent = notes.length
+    ? (notes[0].content.split("\n")[0].slice(0, 34) || `${notes.length} Notizen`)
+    : "Noch keine";
 }
 
-function geldAufklappen(offen, stillOhneSpeichern) {
-  $("geld-detail").classList.toggle("hidden", !offen);
-  $("geld-kopf").setAttribute("aria-expanded", String(offen));
-  $("geld-panel").classList.toggle("offen", offen);
-  if (!stillOhneSpeichern) {
-    try { localStorage.setItem(GELD_OFFEN_SCHLUESSEL, offen ? "1" : "0"); } catch (_) { /* Privatmodus */ }
-  }
+// Beim Start bauen sich die Kacheln einmal gestaffelt auf, danach ist Ruhe
+function kachelnEinzug() {
+  const raster = $("kachel-raster");
+  if (!raster) return;
+  raster.classList.remove("kacheln-rein");
+  void raster.offsetWidth;
+  raster.classList.add("kacheln-rein");
+  setTimeout(() => raster.classList.remove("kacheln-rein"), 900);
 }
-
-$("geld-kopf").addEventListener("click", () => {
-  geldAufklappen($("geld-detail").classList.contains("hidden"));
-});
 
 function renderBudget() {
   const bar = $("budget-bar");
@@ -1105,12 +1155,23 @@ function agendaItems() {
     // Überfällige Deadlines bleiben stehen, bis der Status umgestellt wird
     if (d <= grenze) items.push({ art: "projekt", datum: d, p });
   });
+  events.forEach((ev) => {
+    const d = new Date(ev.date + "T00:00:00");
+    if (d >= heute && d <= grenze) items.push({ art: "termin", datum: d, zeit: ev.time, ev });
+  });
   googleEvents.forEach((g) => {
     const d = new Date(g.date + "T00:00:00");
     // Vergangenes interessiert hier nicht – der Kalender ist kein To-Do
-    if (d >= heute && d <= grenze) items.push({ art: "google", datum: d, g });
+    if (d >= heute && d <= grenze) items.push({ art: "google", datum: d, zeit: g.time, g });
   });
-  return items.sort((a, b) => a.datum - b.datum);
+  return items.sort(sortiereAgenda);
+}
+
+// Erst Datum, dann Uhrzeit; was keine Uhrzeit hat, steht am Tagesende
+function sortiereAgenda(a, b) {
+  if (a.datum - b.datum) return a.datum - b.datum;
+  const za = a.zeit || "99:99", zb = b.zeit || "99:99";
+  return za < zb ? -1 : za > zb ? 1 : 0;
 }
 
 function agendaChip(dateStr, datum) {
@@ -1118,11 +1179,7 @@ function agendaChip(dateStr, datum) {
   const text = ["heute", "morgen", "überfällig"].includes(badge[1])
     ? badge[1]
     : `${kurzDatum(datum)} · ${badge[1]}`;
-  // Feinere Ampel als auf den Karten: im 7-Tage-Fenster wäre sonst alles rot
-  // und die Farbe hätte keine Aussage mehr.
-  const diff = Math.round((datum - todayMidnight()) / 864e5);
-  const ton = diff <= 1 ? "soon" : diff <= 3 ? "mid" : "far";
-  return `<div class="next ${ton}">${text}</div>`;
+  return `<div class="next ${badge[0]}">${text}</div>`;
 }
 
 // Eine Agenda-Zeile. Liste und Monatsansicht teilen sich dieselbe Darstellung
@@ -1150,13 +1207,24 @@ function agendaRowHTML(it) {
       ${agendaChip(it.p.due_date, it.datum)}
     </div>`;
   }
+  if (it.art === "termin") {
+    return `
+    <div class="agenda-row" data-art="termin" data-id="${it.ev.id}">
+      <div class="icon">${svgIcon("calendar")}</div>
+      <div class="agenda-body">
+        <div class="agenda-title">${esc(it.ev.title)}</div>
+        <div class="agenda-meta">Termin${it.ev.time ? ` · ${esc(it.ev.time)} Uhr` : ""}</div>
+      </div>
+      ${agendaChip(it.ev.date, it.datum)}
+    </div>`;
+  }
   if (it.art === "google") {
     return `
     <div class="agenda-row" data-art="google" data-id="${esc(it.g.uid)}">
       <div class="icon">${svgIcon("calendar")}</div>
       <div class="agenda-body">
         <div class="agenda-title">${esc(it.g.title)}</div>
-        <div class="agenda-meta">Kalender${it.g.time ? ` · ${esc(it.g.time)} Uhr` : ""}</div>
+        <div class="agenda-meta">Google-Kalender${it.g.time ? ` · ${esc(it.g.time)} Uhr` : ""}</div>
       </div>
       ${agendaChip(it.g.date, it.datum)}
     </div>`;
@@ -1185,6 +1253,8 @@ function bindAgendaRowClicks(box) {
       el.addEventListener("click", () => openProjectModal(id));
     } else if (el.dataset.art === "abo") {
       el.addEventListener("click", () => openModal(id));
+    } else if (el.dataset.art === "termin") {
+      el.addEventListener("click", () => openEventModal(id));
     }
     // art === "google": bewusst kein Klick-Ziel. Der ICS-Export von Google
     // liefert keine brauchbare Sprungadresse zum einzelnen Termin – ein Link
@@ -1200,8 +1270,8 @@ function renderAgenda() {
   if (!items.length) {
     // Die Agenda speist sich aus drei Quellen – ist eine davon nicht angekommen,
     // ist „nichts fällig" schlicht nicht wahr.
-    box.innerHTML = (subsFehler || todosFehler || projectsFehler)
-      ? fehlerHTML(subsFehler ? "abos" : todosFehler ? "todos" : "projekte")
+    box.innerHTML = (subsFehler || todosFehler || projectsFehler || eventsFehler)
+      ? fehlerHTML(subsFehler ? "abos" : todosFehler ? "todos" : projectsFehler ? "projekte" : "termine")
       : leerHTML(`In den nächsten ${AGENDA_TAGE} Tagen ist nichts fällig.`);
     return;
   }
@@ -1243,11 +1313,15 @@ function agendaItemsImZeitraum(von, bis) {
     const d = new Date(p.due_date + "T00:00:00");
     if (imFenster(d)) items.push({ art: "projekt", datum: d, p });
   });
+  events.forEach((ev) => {
+    const d = new Date(ev.date + "T00:00:00");
+    if (imFenster(d)) items.push({ art: "termin", datum: d, zeit: ev.time, ev });
+  });
   googleEvents.forEach((g) => {
     const d = new Date(g.date + "T00:00:00");
-    if (imFenster(d)) items.push({ art: "google", datum: d, g });
+    if (imFenster(d)) items.push({ art: "google", datum: d, zeit: g.time, g });
   });
-  return items.sort((a, b) => a.datum - b.datum);
+  return items.sort(sortiereAgenda);
 }
 
 let monatsAnker = null;        // 1. des angezeigten Monats
@@ -1437,19 +1511,20 @@ function renderStats() {
   if (!total) { legend.innerHTML = `<div class="li">Keine aktiven Abos.</div>`; return; }
   const R = 58, C = 75, circ = 2 * Math.PI * R;
   let offset = 0;
-  Object.entries(byCat).sort((a, b) => b[1] - a[1]).forEach(([cat, val]) => {
+  Object.entries(byCat).sort((a, b) => b[1] - a[1]).forEach(([cat, val], i) => {
     const frac = val / total;
+    const ton = STAT_TOENE[Math.min(i, STAT_TOENE.length - 1)];
     const el = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     el.setAttribute("cx", C); el.setAttribute("cy", C); el.setAttribute("r", R);
     el.setAttribute("fill", "none");
-    el.setAttribute("stroke", CATEGORIES[cat] || "#888");
+    el.setAttribute("stroke", ton);
     el.setAttribute("stroke-width", "20");
     el.setAttribute("stroke-dasharray", `${frac * circ} ${circ}`);
     el.setAttribute("stroke-dashoffset", String(-offset * circ));
     el.setAttribute("transform", `rotate(-90 ${C} ${C})`);
     svg.appendChild(el);
     offset += frac;
-    legend.innerHTML += `<div class="li"><span class="dot" style="background:${CATEGORIES[cat]}"></span>${esc(cat)}<span class="amt">${fmt(val)} · ${Math.round(frac * 100)} %</span></div>`;
+    legend.innerHTML += `<div class="li"><span class="dot" style="background:${ton}"></span>${esc(cat)}<span class="amt">${fmt(val)} · ${Math.round(frac * 100)} %</span></div>`;
   });
   const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
   label.setAttribute("x", C); label.setAttribute("y", C + 5);
@@ -1563,7 +1638,8 @@ $("f-name").addEventListener("input", () => {
 });
 
 $("f-cycle").addEventListener("change", (e) => $("f-custom-wrap").classList.toggle("hidden", e.target.value !== "custom"));
-$("add-btn").addEventListener("click", () => activeTab === "projekte" ? openProjectModal(null) : openModal(null));
+$("projekt-add-btn").addEventListener("click", () => openProjectModal(null));
+$("abo-add-btn").addEventListener("click", () => openModal(null));
 $("cancel-btn").addEventListener("click", closeModal);
 $("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") closeModal(); });
 
@@ -1653,13 +1729,21 @@ function todoRowHTML(t) {
   const zu = todoParentName(t);
   const metaParts = [esc(t.due_date ? `${fmtDate(new Date(t.due_date + "T00:00:00"))} · ${badge[1]}` : "ohne Termin")];
   if (zu) metaParts.push(esc(zu));
+  // Aufbau in drei Schichten: Wisch-Hinweise liegen fest im Hintergrund,
+  // der Koerper bewegt sich beim Wischen darueber, der Sweep fegt beim
+  // Erledigen einmal durch – die Farbe verlaesst die Zeile woertlich.
   return `
   <div class="todo-row ${t.completed ? "done" : ""}${t.id === ebenAbgehakt ? " eben-bewegt" : ""}" data-id="${t.id}">
-    <button class="todo-check ${t.completed ? "checked" : ""}${t.id === ebenAbgehakt ? " just" : ""}" aria-label="Erledigt"></button>
-    <div class="todo-body">
-      <div class="todo-title">${tagTextHTML(t.title)}</div>
-      <div class="todo-meta ${t.completed ? "" : badge[0]}">${metaParts.join(" · ")}</div>
+    <span class="wisch-hinweis rechts">✓ erledigt</span>
+    <span class="wisch-hinweis links">löschen</span>
+    <div class="zeilen-koerper">
+      <button class="todo-check ${t.completed ? "checked" : ""}${t.id === ebenAbgehakt ? " just" : ""}" aria-label="Erledigt"></button>
+      <div class="todo-body">
+        <div class="todo-title">${tagTextHTML(t.title)}</div>
+        <div class="todo-meta ${t.completed ? "" : badge[0]}">${metaParts.join(" · ")}</div>
+      </div>
     </div>
+    ${t.id === ebenAbgehakt && t.completed ? `<span class="zeilen-sweep"></span>` : ""}
   </div>`;
 }
 
@@ -1692,6 +1776,40 @@ function renderTodos() {
     const id = el.dataset.id;
     el.querySelector(".todo-check").addEventListener("click", (e) => { e.stopPropagation(); toggleTodo(id); });
     el.querySelector(".todo-body").addEventListener("click", () => openTodoModal(id));
+    bindeWisch(el, id);
+  });
+}
+
+/* ---- Wischgesten: rechts erledigt, links loescht ----
+   Der Koerper folgt dem Finger, die Hinweise dahinter werden sichtbar.
+   Erst ab 12 px klar horizontaler Bewegung greift die Geste – sonst
+   kaempfte sie mit dem normalen Scrollen. Knoepfe bleiben als zweiter Weg. */
+function bindeWisch(row, id) {
+  const koerper = row.querySelector(".zeilen-koerper");
+  if (!koerper) return;
+  let sx = 0, sy = 0, dx = 0, greift = false;
+  row.addEventListener("touchstart", (e) => {
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; dx = 0; greift = false;
+  }, { passive: true });
+  row.addEventListener("touchmove", (e) => {
+    const nx = e.touches[0].clientX - sx, ny = e.touches[0].clientY - sy;
+    if (!greift && Math.abs(nx) > 12 && Math.abs(nx) > Math.abs(ny) * 1.4) greift = true;
+    if (!greift) return;
+    dx = nx;
+    koerper.style.transform = `translateX(${dx}px)`;
+    const rechts = row.querySelector(".wisch-hinweis.rechts");
+    const links = row.querySelector(".wisch-hinweis.links");
+    if (rechts) rechts.style.opacity = dx > 34 ? "1" : "0";
+    if (links) links.style.opacity = dx < -34 ? "1" : "0";
+  }, { passive: true });
+  row.addEventListener("touchend", () => {
+    koerper.style.transition = "transform 0.2s ease";
+    koerper.style.transform = "";
+    setTimeout(() => { koerper.style.transition = ""; }, 220);
+    row.querySelectorAll(".wisch-hinweis").forEach((h) => { h.style.opacity = "0"; });
+    if (!greift) return;
+    if (dx > 80) toggleTodo(id);
+    else if (dx < -80) deleteTodo(id);
   });
 }
 
@@ -2259,6 +2377,7 @@ function oeffneEintrag(art, id) {
   else if (art === "abo") openModal(id);
   else if (art === "todo") openTodoModal(id);
   else if (art === "note") openNoteModal(id);
+  else if (art === "termin") openEventModal(id);
 }
 
 // Aus der Sammelansicht heraus direkt ins jeweilige Bearbeiten-Fenster
@@ -2385,6 +2504,154 @@ function datumAusText(roh) {
   // der Aufrufer entscheidet, was das heisst.
   return { datum, titel };
 }
+
+/* ---- Uhrzeit im Satz – nur fuer Termine, To-Dos haben kein Zeitfeld ---- */
+function zeitAusText(roh) {
+  let text = ` ${roh} `;
+  let zeit = null;
+  const regeln = [
+    /(^|\s)um (\d{1,2})[:.](\d{2})(?=\s|$)/i,
+    /(^|\s)(\d{1,2})[:.](\d{2}) ?uhr(?=\s|$)/i,
+    /(^|\s)um (\d{1,2})(?=\s|$)/i,
+    /(^|\s)(\d{1,2}) ?uhr(?=\s|$)/i,
+    /(^|\s)(\d{1,2}):(\d{2})(?=\s|$)/,
+  ];
+  for (const re of regeln) {
+    const m = text.match(re);
+    if (!m) continue;
+    const std = parseInt(m[2], 10);
+    const min = m[3] ? parseInt(m[3], 10) : 0;
+    if (std > 23 || min > 59) continue;
+    zeit = `${String(std).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+    text = text.replace(re, " ");
+    break;
+  }
+  const { datum, titel } = datumAusText(text.replace(/\s+/g, " ").trim());
+  return { datum, zeit, titel };
+}
+
+/* ================= TERMINE =================
+   Eigene Kalender-Eintraege – im Gegensatz zu den Google-Terminen voll
+   bearbeitbar. Die Schnelleingabe versteht Tag UND Uhrzeit aus dem Satz. */
+
+function zeichneTerminHinweis() {
+  const el = $("termin-quick-hinweis");
+  const roh = $("termin-quick-titel").value.trim();
+  const erkannt = roh ? zeitAusText(roh) : { datum: null, zeit: null, titel: "" };
+  if (!erkannt.datum && !erkannt.zeit) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  const datum = erkannt.datum || toDateStr(todayMidnight());
+  el.innerHTML = `<span class="chip active">${esc(dateBadge(datum)[1])} · ${esc(fmtDate(new Date(datum + "T00:00:00")))}${erkannt.zeit ? " · " + esc(erkannt.zeit) : ""}</span>` +
+    (erkannt.titel ? "" : ` <span class="quick-warnung">nur wann – das Was fehlt noch</span>`);
+}
+
+async function quickAddTermin() {
+  const el = $("termin-quick-titel");
+  const roh = el.value.trim();
+  if (!roh) return;
+  const erkannt = zeitAusText(roh);
+  const titel = erkannt.titel || roh;
+  // Ohne erkennbaren Tag gilt heute – der Hinweis zeigt das vorher an,
+  // und im Termin-Fenster laesst es sich jederzeit korrigieren.
+  const datum = erkannt.datum || toDateStr(todayMidnight());
+  el.disabled = true;
+  try {
+    const { data, error } = await db.from("events")
+      .insert({ user_id: user.id, title: titel, date: datum, time: erkannt.zeit }).select().single();
+    if (error) throw error;
+    data.time = data.time ? String(data.time).slice(0, 5) : null;
+    ersetzeInListe(events, data);
+    el.value = "";
+    zeichneTerminHinweis();
+    renderAll();
+    showToast("Termin eingetragen");
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    el.disabled = false;
+    el.focus();
+  }
+}
+
+function openEventModal(id) {
+  editingEventId = id || null;
+  $("event-modal-title").textContent = id ? "Termin bearbeiten" : "Termin anlegen";
+  $("event-delete-btn").classList.toggle("hidden", !id);
+  if (id) {
+    const ev = events.find((x) => x.id === id);
+    if (!ev) return;
+    $("event-f-title").value = ev.title;
+    $("event-f-date").value = ev.date;
+    $("event-f-time").value = ev.time || "";
+    $("event-f-note").value = ev.note || "";
+  } else {
+    $("event-f-title").value = "";
+    $("event-f-date").value = toDateStr(todayMidnight());
+    $("event-f-time").value = "";
+    $("event-f-note").value = "";
+  }
+  oeffneOverlay("event-overlay");
+  setTimeout(() => $("event-f-title").focus(), 60);
+}
+function closeEventModal() { schliesseOverlay("event-overlay"); editingEventId = null; }
+
+async function saveEventModal() {
+  const titel = $("event-f-title").value.trim();
+  const datum = $("event-f-date").value;
+  if (!titel || !datum) { showToast("Bitte Titel und Datum ausfüllen"); return; }
+  const row = {
+    title: titel,
+    date: datum,
+    time: $("event-f-time").value || null,
+    note: $("event-f-note").value.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  const btn = $("event-save-btn");
+  btn.disabled = true;
+  try {
+    if (editingEventId) {
+      const { data, error } = await db.from("events").update(row).eq("id", editingEventId).select().single();
+      if (error) throw error;
+      data.time = data.time ? String(data.time).slice(0, 5) : null;
+      ersetzeInListe(events, data);
+      showToast("Gespeichert");
+    } else {
+      const { data, error } = await db.from("events").insert({ ...row, user_id: user.id }).select().single();
+      if (error) throw error;
+      data.time = data.time ? String(data.time).slice(0, 5) : null;
+      ersetzeInListe(events, data);
+      showToast("Termin eingetragen");
+    }
+    closeEventModal();
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteEvent(id) {
+  const ev = events.find((x) => x.id === id);
+  if (!ev) return;
+  if (!confirm(`„${ev.title}“ wirklich löschen?`)) return;
+  const { error } = await db.from("events").delete().eq("id", id);
+  if (error) { showToast("Fehler beim Löschen"); return; }
+  entferneAusListe(events, id);
+  closeEventModal();
+  renderAll();
+  showToast("Gelöscht");
+}
+
+$("termin-quick-add").addEventListener("click", quickAddTermin);
+$("termin-quick-titel").addEventListener("keydown", (e) => { if (e.key === "Enter") quickAddTermin(); });
+$("termin-quick-titel").addEventListener("input", zeichneTerminHinweis);
+$("event-save-btn").addEventListener("click", saveEventModal);
+$("event-cancel-btn").addEventListener("click", closeEventModal);
+$("event-delete-btn").addEventListener("click", () => deleteEvent(editingEventId));
+$("event-overlay").addEventListener("click", (e) => { if (e.target.id === "event-overlay") closeEventModal(); });
 
 /* ================= ASSISTENT =================
    Eine zweite Tuer in dieselbe App: fragen, was ansteht, oder sagen, was
@@ -2517,7 +2784,7 @@ function oeffneAssistent() {
 }
 function schliesseAssistent() { schliesseOverlay("assistent-overlay"); }
 
-$("assistent-btn").addEventListener("click", oeffneAssistent);
+document.querySelectorAll(".sys-assistent").forEach((b) => b.addEventListener("click", oeffneAssistent));
 $("assistent-close-btn").addEventListener("click", schliesseAssistent);
 $("assistent-send-btn").addEventListener("click", sendeAnAssistent);
 $("assistent-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendeAnAssistent(); });
@@ -2591,7 +2858,9 @@ function sucheTreffer(eingabe) {
     todos: sortTodos(todos.filter((t) => passtAufBegriffe(begriffe, t.title, t.description))),
     abos: subs.filter((s) => passtAufBegriffe(begriffe, s.name, s.note, s.category)),
     notizen: notes.filter((n) => passtAufBegriffe(begriffe, n.content)),
-    termine: googleEvents.filter((g) => passtAufBegriffe(begriffe, g.title))
+    termine: events.filter((ev) => passtAufBegriffe(begriffe, ev.title, ev.note))
+      .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0),
+    google: googleEvents.filter((g) => passtAufBegriffe(begriffe, g.title))
   };
 }
 
@@ -2721,15 +2990,19 @@ function zeichneSuche() {
         esc(kurzDatum(new Date(n.created_at))))
     ).join(""));
   }
-  if (erg.termine.length) {
-    // Kalender-Termine gehören Google, nicht der App: anzeigen ja, öffnen nein –
-    // genau wie in der Agenda.
-    teile.push(`<div class="tag-sec-head">Kalender</div>` + erg.termine.map((g) =>
-      `<div class="tag-row ohne-ziel">
-        <div class="tag-row-symbol">${svgIcon("calendar")}</div>
-        <div class="tag-row-body">${hervorheben(g.title, b)}</div>
-        <div class="tag-row-rechts">${esc(kurzDatum(new Date(g.date + "T00:00:00")))}</div>
-      </div>`).join(""));
+  if (erg.termine.length || erg.google.length) {
+    // Eigene Termine sind anfassbar; Google-Termine sind Gaeste – anzeigen ja,
+    // oeffnen nein, genau wie in der Agenda.
+    teile.push(`<div class="tag-sec-head">Kalender</div>` +
+      erg.termine.map((ev) =>
+        tagRowHTML("termin", ev.id, svgIcon("calendar"), hervorheben(ev.title, b),
+          esc(kurzDatum(new Date(ev.date + "T00:00:00")) + (ev.time ? " · " + ev.time : "")))).join("") +
+      erg.google.map((g) =>
+        `<div class="tag-row ohne-ziel">
+          <div class="tag-row-symbol">${svgIcon("calendar")}</div>
+          <div class="tag-row-body">${hervorheben(g.title, b)}<span class="gast-badge">Google</span></div>
+          <div class="tag-row-rechts">${esc(kurzDatum(new Date(g.date + "T00:00:00")))}</div>
+        </div>`).join(""));
   }
 
   // Aktionen stehen VOR den Treffern: wer tippt, um anzulegen, soll nicht
@@ -2749,7 +3022,7 @@ function oeffneSuche() {
 }
 function schliesseSuche() { schliesseOverlay("search-overlay"); }
 
-$("search-btn").addEventListener("click", oeffneSuche);
+document.querySelectorAll(".sys-suche").forEach((b) => b.addEventListener("click", oeffneSuche));
 $("search-close-btn").addEventListener("click", schliesseSuche);
 $("search-input").addEventListener("input", zeichneSuche);
 $("search-overlay").addEventListener("click", (e) => { if (e.target.id === "search-overlay") schliesseSuche(); });
@@ -2887,44 +3160,113 @@ function bindSettingsUI() {
   };
 }
 
-/* ================= TABS ================= */
-document.querySelectorAll(".tabbar button").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    activeTab = btn.dataset.tab;
-    document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("active", b === btn));
-    ["home", "projekte", "abos", "todos", "notes", "settings"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== activeTab));
-    // Der +-Knopf legt je nach Tab ein Abo oder Projekt an –
-    // To-Dos und Notizen haben ihre eigene Schnelleingabe
-    $("add-btn").classList.toggle("hidden", activeTab !== "abos" && activeTab !== "projekte");
-    if (activeTab === "abos") renderStats();
-    zeigeTabAn($("tab-" + activeTab));
+/* ================= APP-NAVIGATION =================
+   Kachel wird App: der Schirm zoomt per FLIP aus seiner Kachel auf und
+   schrumpft beim Schliessen dorthin zurueck – der Kopf behaelt die Karte,
+   wo man ist. Bei reduzierter Bewegung oder im Hintergrund-Tab wird hart
+   geschaltet: ein eingefrorener Zoom saehe aus wie eine kaputte App. */
 
-    // Kurzer Hüpfer nur beim Antippen, kein Dauerzustand – sonst sitzt der
-    // aktive Tab dauerhaft höher als die Nachbarn und die Reihe wirkt uneben.
-    const icon = btn.querySelector(".ti");
-    icon.classList.remove("huepft");
-    void icon.offsetWidth;
-    icon.classList.add("huepft");
+let flipTimer = null;
+
+function ohneBewegung() {
+  return matchMedia("(prefers-reduced-motion: reduce)").matches || document.visibilityState === "hidden";
+}
+
+function kachelFuer(name) {
+  return document.querySelector(`.kachel[data-app="${name}"]:not(.kachel-heute)`) ||
+         document.querySelector(`.kachel[data-app="${name}"]`);
+}
+
+function oeffneAppScreen(name, quellKachel) {
+  const schirm = $("app-" + name);
+  if (!schirm || aktiveApp === name) return;
+  aktiveApp = name;
+  clearTimeout(flipTimer);
+  document.querySelectorAll(".app-schirm").forEach((s2) => { if (s2 !== schirm) s2.classList.add("hidden"); });
+  schirm.classList.remove("hidden");
+  schirm.scrollTop = 0;
+  if (name === "finanzen") renderStats();
+  zeigeTabAn(schirm.querySelector(".app-inhalt"));
+  const kachel = quellKachel || kachelFuer(name);
+  if (ohneBewegung() || !kachel) return;
+  const r = kachel.getBoundingClientRect();
+  schirm.classList.remove("zoomt");
+  schirm.style.transformOrigin = "top left";
+  schirm.style.transform = `translate(${r.left}px, ${r.top}px) scale(${Math.max(r.width / innerWidth, 0.05)}, ${Math.max(r.height / innerHeight, 0.05)})`;
+  schirm.style.opacity = "0.35";
+  void schirm.offsetWidth;
+  schirm.classList.add("zoomt");
+  schirm.style.transform = "";
+  schirm.style.opacity = "";
+  const fertig = () => schirm.classList.remove("zoomt");
+  schirm.addEventListener("transitionend", fertig, { once: true });
+  flipTimer = setTimeout(fertig, 520);
+}
+
+function schliesseAppScreen() {
+  if (!aktiveApp) return;
+  const schirm = $("app-" + aktiveApp);
+  const kachel = kachelFuer(aktiveApp);
+  aktiveApp = null;
+  renderHome();
+  const zu = () => {
+    schirm.classList.add("hidden");
+    schirm.classList.remove("zoomt");
+    schirm.style.transform = "";
+    schirm.style.opacity = "";
+  };
+  if (ohneBewegung() || !kachel) { zu(); return; }
+  clearTimeout(flipTimer);
+  const r = kachel.getBoundingClientRect();
+  schirm.classList.add("zoomt");
+  schirm.style.transformOrigin = "top left";
+  schirm.style.transform = `translate(${r.left}px, ${r.top}px) scale(${Math.max(r.width / innerWidth, 0.05)}, ${Math.max(r.height / innerHeight, 0.05)})`;
+  schirm.style.opacity = "0";
+  let erledigt = false;
+  const fertig = () => { if (!erledigt) { erledigt = true; zu(); } };
+  schirm.addEventListener("transitionend", fertig, { once: true });
+  flipTimer = setTimeout(fertig, 520);
+}
+
+document.querySelectorAll(".kachel").forEach((k) =>
+  k.addEventListener("click", () => oeffneAppScreen(k.dataset.app, k)));
+document.querySelectorAll(".app-zurueck").forEach((b) =>
+  b.addEventListener("click", schliesseAppScreen));
+
+// Runterziehen am App-Kopf schliesst – der Kopf ist der Griff der App
+document.querySelectorAll(".app-kopf").forEach((kopf) => {
+  const schirm = kopf.closest(".app-schirm");
+  let sy = 0, dy = 0;
+  kopf.addEventListener("touchstart", (e) => { sy = e.touches[0].clientY; dy = 0; }, { passive: true });
+  kopf.addEventListener("touchmove", (e) => {
+    dy = Math.max(0, e.touches[0].clientY - sy);
+    schirm.style.transform = dy ? `translateY(${dy}px)` : "";
+    schirm.style.opacity = dy ? String(Math.max(0.45, 1 - dy / 420)) : "";
+  }, { passive: true });
+  kopf.addEventListener("touchend", () => {
+    if (dy > 90) { schliesseAppScreen(); return; }
+    schirm.classList.add("zoomt");
+    schirm.style.transform = "";
+    schirm.style.opacity = "";
+    setTimeout(() => schirm.classList.remove("zoomt"), 460);
   });
 });
 
-// Der neue Tab blendet einmal gestaffelt auf. Die Klasse fliegt danach wieder
-// raus, damit späteres Neuzeichnen (Speichern, Abhaken) die Liste nicht erneut
-// durchtanzen lässt – Bewegung soll Handlung heißen, nicht Hintergrundrauschen.
+// Der geoeffnete Bereich blendet einmal gestaffelt auf. Die Klasse fliegt
+// danach wieder raus, damit spaeteres Neuzeichnen die Liste nicht erneut
+// durchtanzen laesst – Bewegung markiert die Handlung, nicht den Zustand.
 let tabAnimTimer = null;
 function zeigeTabAn(sec) {
+  if (!sec) return;
   clearTimeout(tabAnimTimer);
   document.querySelectorAll(".tab-in").forEach((el) => el.classList.remove("tab-in"));
-  void sec.offsetWidth;   // Neustart erzwingen, falls derselbe Tab erneut kommt
+  void sec.offsetWidth;
   sec.classList.add("tab-in");
   tabAnimTimer = setTimeout(() => sec.classList.remove("tab-in"), 700);
 }
 
-// Solange .tab-in auf einem Abschnitt sitzt (bis zu 700 ms), bekaeme JEDE frisch
-// eingefuegte Listenzeile die gestaffelte Eintritts-Animation ab – auch wenn nur
-// ein To-Do abgehakt oder ein Filter-Chip getippt wurde. Dann tanzte die ganze
-// Liste erneut durch, statt nur das geaenderte Element. Wer eine Liste neu
-// aufbaut, raeumt die Klasse daher vorher weg.
+// Wer eine Liste komplett neu aufbaut, raeumt die Einzugs-Klasse vorher weg –
+// sonst tanzt bei jedem Abhaken die ganze Liste erneut durch.
 function stilleZeichnung() {
   clearTimeout(tabAnimTimer);
   document.querySelectorAll(".tab-in").forEach((el) => el.classList.remove("tab-in"));
@@ -3004,13 +3346,14 @@ function dateiHerunterladen(blob, name) {
 $("backup-btn").addEventListener("click", () => {
   const sicherung = {
     app: "Saray OS",
-    version: 1,
+    version: 2,
     erstellt_am: new Date().toISOString(),
     konto: user?.email || null,
     abos: subs,
     todos,
     notizen: notes,
     projekte: projects,
+    termine: events,
     profil: profile
   };
   const tag = toDateStr(todayMidnight());
@@ -3137,7 +3480,8 @@ async function maybeNotifyDue(force) {
   const abos = dueSubs();
   const aufgaben = dueTodos();
   const deadlines = dueProjects();
-  if (!abos.length && !aufgaben.length && !deadlines.length) { if (force) showToast("Nichts fällig"); return; }
+  const termine = events.filter((ev) => ev.date === toDateStr(todayMidnight()));
+  if (!abos.length && !aufgaben.length && !deadlines.length && !termine.length) { if (force) showToast("Nichts fällig"); return; }
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   // pro Tag nur einmal benachrichtigen – localStorage, sonst gilt das nur pro Browser-Sitzung
   const key = "sarayos-notified-" + todayMidnight().toISOString().slice(0, 10);
@@ -3149,13 +3493,15 @@ async function maybeNotifyDue(force) {
   if (abos.length) teile.push(abos.length === 1 ? "1 Zahlung" : `${abos.length} Zahlungen`);
   if (aufgaben.length) teile.push(aufgaben.length === 1 ? "1 To-Do" : `${aufgaben.length} To-Dos`);
   if (deadlines.length) teile.push(deadlines.length === 1 ? "1 Deadline" : `${deadlines.length} Deadlines`);
+  if (termine.length) teile.push(termine.length === 1 ? "1 Termin" : `${termine.length} Termine`);
   try {
     const reg = await navigator.serviceWorker.ready;
     reg.showNotification(`Saray OS – ${teile.join(" · ")}`, {
       body: [
         ...abos.map((s) => `${customIcon(s) || "💳"} ${s.name}: ${fmt(bruttoPreis(s))} am ${fmtDate(new Date(s.next_payment + "T00:00:00"))}`),
         ...aufgaben.map((t) => `☐ ${t.title} (${dateBadge(t.due_date)[1]})`),
-        ...deadlines.map((p) => `📁 ${p.name} (${dateBadge(p.due_date)[1]})`)
+        ...deadlines.map((p) => `📁 ${p.name} (${dateBadge(p.due_date)[1]})`),
+        ...termine.map((t) => `📅 ${t.title}${t.time ? ` · ${t.time}` : ""}`)
       ].join("\n"),
       icon: "icons/icon-192.png",
       badge: "icons/icon-192.png"

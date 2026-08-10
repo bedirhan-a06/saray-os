@@ -168,11 +168,22 @@ async function taeglicherRundlauf() {
       .lte("invoiced_on", plusTage(tag, -RECHNUNG_FRIST_TAGE))
       .order("invoiced_on");
 
+    // Eigene Termine im Vorlauf-Fenster – ein Kalender, der nie erinnert,
+    // waere nur eine Liste.
+    const { data: termine } = await admin
+      .from("events")
+      .select("title, date, time")
+      .eq("user_id", p.user_id)
+      .gte("date", tag)
+      .lte("date", plusTage(tag, vorlauf))
+      .order("date");
+
     const abos = faellig ?? [];
     const offen = aufgaben ?? [];
     const projekte = deadlines ?? [];
     const ausstehend = rechnungen ?? [];
-    if (!abos.length && !offen.length && !projekte.length && !ausstehend.length) continue;
+    const kalender = termine ?? [];
+    if (!abos.length && !offen.length && !projekte.length && !ausstehend.length && !kalender.length) continue;
 
     const { data: geraete } = await admin
       .from("push_subscriptions")
@@ -185,6 +196,7 @@ async function taeglicherRundlauf() {
     if (offen.length) teile.push(offen.length === 1 ? "1 To-Do" : `${offen.length} To-Dos`);
     if (projekte.length) teile.push(projekte.length === 1 ? "1 Deadline" : `${projekte.length} Deadlines`);
     if (ausstehend.length) teile.push(ausstehend.length === 1 ? "1 offene Rechnung" : `${ausstehend.length} offene Rechnungen`);
+    if (kalender.length) teile.push(kalender.length === 1 ? "1 Termin" : `${kalender.length} Termine`);
     const titel = teile.join(" · ");
 
     const wannText = (datum: string) =>
@@ -201,6 +213,8 @@ async function taeglicherRundlauf() {
         const betrag = Number(r.order_value) > 0 ? ` ${alsEuro(r.order_value)}` : "";
         return `💶 ${r.name}${betrag} – Rechnung seit ${tage} Tagen offen`;
       }),
+      ...kalender.map((t) =>
+        `📅 ${t.title}${t.time ? ` · ${String(t.time).slice(0, 5)}` : ""} (${t.date === tag ? "heute" : "am " + alsDeutschesDatum(t.date)})`),
     ].join("\n");
 
     for (const g of geraete) {

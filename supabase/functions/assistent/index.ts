@@ -79,7 +79,7 @@ async function kontext(userId: string) {
   const tag = heute();
   const grenze = plusTage(tag, 7);
 
-  const [{ data: subs }, { data: todos }, { data: projects }, { data: profile }] = await Promise.all([
+  const [{ data: subs }, { data: todos }, { data: projects }, { data: profile }, { data: evts }] = await Promise.all([
     admin.from("subscriptions").select("name, price, vat_percent, next_payment")
       .eq("user_id", userId).eq("archived", false),
     admin.from("todos").select("title, due_date")
@@ -87,6 +87,8 @@ async function kontext(userId: string) {
     admin.from("projects").select("name, status, due_date, order_value, payment_status, invoiced_on, paid_on")
       .eq("user_id", userId),
     admin.from("profiles").select("display_name, monthly_budget").eq("user_id", userId).maybeSingle(),
+    admin.from("events").select("title, date, time")
+      .eq("user_id", userId).gte("date", tag).lte("date", grenze).order("date"),
   ]);
 
   const brutto = (s: { price: unknown; vat_percent: unknown }) =>
@@ -123,6 +125,9 @@ async function kontext(userId: string) {
     projekt_deadlines_7_tage: deadlines,
     offene_rechnungen: offeneRechnungen,
     einnahmen_diesen_monat: alsEuro(einnahmenDiesenMonat),
+    termine_7_tage: (evts ?? []).map((ev) => ({
+      titel: ev.title, am: ev.date, um: ev.time ? String(ev.time).slice(0, 5) : null,
+    })),
   };
 }
 

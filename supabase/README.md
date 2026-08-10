@@ -173,6 +173,36 @@ wird, was geladen ist. Gedacht als Ausweg, falls das Supabase-Projekt einmal
 nicht erreichbar ist; es ist **kein verschlüsseltes Backup**, die Datei liegt im
 Klartext (auch die Notizen, die in der App hinter dem PIN liegen).
 
+## Etappe 1: Saray OS als OS
+
+Die App ist kein Tab-Wechsler mehr, sondern ein OS: ein Home-Bildschirm mit
+lebenden Kacheln (jede zeigt ihren Stand, bevor man tippt), jede Funktion eine
+Vollbild-App, die per FLIP aus ihrer Kachel aufzoomt. Zurück per Chevron oder
+Runterziehen am App-Kopf. Suche und Assistent sind System-Ebene: einmal in der
+Home-Kopfzeile, einmal im Kopf jeder App.
+
+Design „Schwarz & Signal": fast monochrom (#0a0a0a/#141414/#2a2a2a) plus eine
+Signalfarbe (Lime #c8f04a). **Farbe = Dringlichkeit** — Signal leuchtet nur bei
+überfällig/heute/zu lange offen. Die alte rot/gelb/grün-Ampel ist tot; Rot
+bleibt für Fehler und Löschen. Die alten `--gold-*`-Variablen zeigen als
+Aliasse auf das Signal, damit nicht jede Stelle angefasst werden musste.
+
+Bewegung: Kachel-wird-App (FLIP), Lime-Sweep beim Abhaken (die Farbe verlässt
+die Zeile), Wischgesten auf To-Do-Zeilen (rechts erledigt, links löscht),
+rollende Zahlen, gestaffelter Home-Einzug. Bei `prefers-reduced-motion` oder
+im Hintergrund-Tab wird hart geschaltet — ein eingefrorener Zoom sähe aus wie
+eine kaputte App.
+
+## Eigene Termine (Tabelle events)
+
+`events`: title, date, time (nullable), note — RLS wie `todos`. Die
+Kalender-App legt per Schnelleingabe an („Friseur Dienstag 14 Uhr" —
+`zeitAusText()` versteht Tag UND Uhrzeit, mit Live-Hinweis vor dem Speichern);
+bearbeiten/löschen im Termin-Modal. Eigene Termine laufen durch Agenda,
+Monatsansicht, Suche, die lokale Tagesmitteilung, den täglichen Push
+(functions/push, „N Termine") und den Assistent-Kontext (termine_7_tage).
+Google-Termine bleiben read-only daneben, als „Google-Kalender" gekennzeichnet.
+
 ## Befehlsfeld und natürliches Eintragen
 
 Die Suche kann auch anlegen: `todo Rechnung morgen`, `notiz …`, `abo …`,

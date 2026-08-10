@@ -1,22 +1,29 @@
-/* ============ Saray OS – Premium Dark/Gold Theme ============ */
+/* ============ Saray OS – Schwarz & Signal ============
+   Fast monochrom, eine Farbe. Die Regel, die alles traegt:
+   FARBE = DRINGLICHKEIT. Signal leuchtet nur, wo etwas Bedo heute braucht –
+   ueberfaellig, offen seit Wochen, jetzt dran. Alles Ruhige ist grau.
+   Rot bleibt fuer Fehler und Loeschen (Konvention), nie fuer Termine. */
 :root {
-  --bg: #0b0d12;
-  --bg-2: #10131a;
-  --panel: #151923;
-  --panel-2: #1b2029;
-  --border: #262c38;
-  --border-gold: rgba(212, 175, 55, 0.28);
-  --text: #f0f1f4;
-  --text-dim: #9aa2b1;
-  --gold-1: #f6e7b0;
-  --gold-2: #d4af37;
-  --gold-3: #a97f1f;
-  --gold-grad: linear-gradient(135deg, #f6e7b0 0%, #d4af37 45%, #a97f1f 100%);
+  --bg: #0a0a0a;
+  --bg-2: #101010;
+  --panel: #141414;
+  --panel-2: #191919;
+  --border: #2a2a2a;
+  --signal: #c8f04a;
+  --border-gold: rgba(200, 240, 74, 0.4);
+  --text: #f5f5f5;
+  --text-dim: #8a8a8a;
+  /* Die alten Gold-Namen bleiben als Griffe stehen und zeigen alle auf das
+     Signal – so musste nicht jede der ~40 Stellen einzeln angefasst werden. */
+  --gold-1: #dff58f;
+  --gold-2: #c8f04a;
+  --gold-3: #9fc73a;
+  --gold-grad: linear-gradient(135deg, #c8f04a 0%, #c8f04a 100%);
   --danger: #f2707a;
-  --warn: #f4b860;
-  --ok: #6ee7b7;
-  --radius: 18px;
-  --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  --warn: #c8f04a;
+  --ok: #8a8a8a;
+  --radius: 16px;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -65,12 +72,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   text-transform: uppercase;
   letter-spacing: 0.15em;
 }
-.gold-text {
-  background: var(--gold-grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
+.gold-text, .signal-text { color: var(--signal); }
 
 /* ---------- Auth-Ansicht ---------- */
 #auth-view {
@@ -80,7 +82,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: radial-gradient(ellipse at 50% 0%, #161b28 0%, var(--bg) 60%);
+  background: var(--bg);
 }
 .auth-card {
   width: 100%;
@@ -147,7 +149,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   align-items: center;
   justify-content: center;
   padding: 24px max(20px, env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom));
-  background: radial-gradient(ellipse at 50% 0%, #161b28 0%, var(--bg) 60%);
+  background: var(--bg);
 }
 .lock-card { width: 100%; max-width: 320px; text-align: center; }
 .lock-card > svg { display: block; margin: 0 auto 8px; }
@@ -205,7 +207,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
      und muss die Statusleiste daher selbst freihalten. */
   padding: 0
            max(16px, env(safe-area-inset-right))
-           122px
+           44px
            max(16px, env(safe-area-inset-left));
 }
 .app-header {
@@ -258,7 +260,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
 }
 
 /* ---------- Stat-Kacheln ---------- */
-.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+.summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
 .stat {
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
   border: 1px solid var(--border);
@@ -565,9 +567,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   display: inline-block;
   white-space: nowrap;
 }
-.next.soon { background: rgba(242, 112, 122, 0.14); color: var(--danger); }
-.next.mid { background: rgba(244, 184, 96, 0.14); color: var(--warn); }
-.next.far { background: rgba(110, 231, 183, 0.11); color: var(--ok); }
+/* Keine Ampel mehr: entweder es braucht dich (Signal) oder nicht (still).
+   "in 5 Tagen" ist eine Information, keine Warnstufe. */
+.next.signal { background: rgba(200, 240, 74, 0.16); color: var(--signal); }
+.next.still { background: #1d1d1d; color: var(--text-dim); }
 .card-actions {
   display: flex;
   gap: 6px;
@@ -632,15 +635,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   color: var(--text-dim);
   letter-spacing: 0;
 }
-.gruppen-kopf.st-offen  { color: var(--gold-2); }
-.gruppen-kopf.st-arbeit { color: #7c9eff; }
-.gruppen-kopf.st-wartet { color: var(--warn); }
-.gruppen-kopf.st-fertig { color: var(--ok); }
+.gruppen-kopf.st-arbeit { color: var(--text); }
+.gruppen-kopf.st-fertig { color: #5a5a5a; }
 
-.status-chip.st-offen  { background: rgba(212, 175, 55, 0.14);  color: var(--gold-2); }
-.status-chip.st-arbeit { background: rgba(124, 158, 255, 0.14); color: #7c9eff; }
-.status-chip.st-wartet { background: rgba(244, 184, 96, 0.14);  color: var(--warn); }
-.status-chip.st-fertig { background: rgba(110, 231, 183, 0.12); color: var(--ok); }
+.status-chip { background: #1d1d1d; color: var(--text-dim); }
 
 /* Geld am Projekt: Wert links, Stand als Chip daneben */
 .project-geld { display: flex; align-items: center; gap: 8px; margin-top: 7px; flex-wrap: wrap; }
@@ -653,10 +651,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold-2); outline
   background: var(--panel-2);
   color: var(--text-dim);
 }
-.geld-chip.geld-angebot    { background: rgba(154, 162, 177, 0.14); color: var(--text-dim); }
-.geld-chip.geld-beauftragt { background: rgba(124, 158, 255, 0.14); color: #7c9eff; }
-.geld-chip.geld-rechnung   { background: rgba(244, 184, 96, 0.16);  color: var(--warn); }
-.geld-chip.geld-bezahlt    { background: rgba(110, 231, 183, 0.14); color: var(--ok); }
+/* Nur eine Rechnung, die zu lange offen ist, bekommt das Signal */
+.geld-chip.alt { background: rgba(200, 240, 74, 0.16); color: var(--signal); }
 .project-meta { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
 .project-note { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; font-style: italic; }
 .project-link {
@@ -907,10 +903,12 @@ mark {
 }
 .todo-quickadd button .ic { width: 21px; height: 21px; }
 .todos { display: flex; flex-direction: column; gap: 9px; }
+/* Drei Schichten: Hinweise fest im Hintergrund, der Koerper wischt darueber,
+   der Sweep fegt beim Erledigen durch (Aufbau in todoRowHTML). */
 .todo-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: block;
+  position: relative;
+  overflow: hidden;
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
   border: 1px solid var(--border);
   border-radius: 15px;
@@ -939,8 +937,7 @@ mark {
 .todo-body { flex: 1; min-width: 0; cursor: pointer; }
 .todo-title { font-weight: 600; font-size: 14.5px; }
 .todo-meta { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
-.todo-meta.soon { color: var(--danger); }
-.todo-meta.mid { color: var(--warn); }
+.todo-meta.signal { color: var(--signal); }
 .todo-row.done { opacity: 0.55; }
 .todo-row.done .todo-title { text-decoration: line-through; }
 
@@ -1015,89 +1012,7 @@ mark {
 .switch input:checked + .slider::before { transform: translateX(19px); background: #14110a; }
 
 /* ---------- Tab-Bar ---------- */
-/* Die Leiste ist selbst ein Modul-Raster: sechs Kacheln, von denen eine
-   groesser ist. Dieselbe Idee wie im Zeichen der App – und der Grund, warum
-   sie nicht wie die Standard-Tableiste jeder anderen App aussieht. */
-.tabbar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(13, 15, 20, 0.92);
-  backdrop-filter: blur(14px);
-  border-top: 1px solid var(--border);
-  display: flex;
-  gap: 4px;
-  padding: 7px max(9px, env(safe-area-inset-right))
-           calc(7px + env(safe-area-inset-bottom)) max(9px, env(safe-area-inset-left));
-  z-index: 40;
-}
-.tabbar button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  /* Enge Laufweite: „Einstellungen" ist das längste Wort und muss bei
-     6 Kacheln auf 375 px in seine Kachel passen. */
-  font-size: 8.5px;
-  letter-spacing: -0.02em;
-  color: var(--text-dim);
-  font-weight: 600;
-  /* flex statt fixer Breite: die aktive Kachel waechst, die anderen weichen.
-     Deshalb laeuft nichts ueber den Rand, egal wie schmal das Geraet ist. */
-  flex: 1;
-  min-width: 0;
-  height: 48px;
-  border-radius: 13px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  padding: 0 2px;
-  /* Die Breite wechselt bewusst OHNE Uebergang: bleibt eine flex-grow-Animation
-     haengen (App geht mitten im Tabwechsel in den Hintergrund), behaelt die alte
-     Kachel ihre Breite und es sehen zwei Tabs aktiv aus – eine golden, eine
-     breit. Dieselbe Ueberlegung wie beim FAB und beim Monatsgitter: lieber kein
-     Uebergang als einer, der in einem falschen Zustand einfriert.
-     Die Bewegung traegt hier der Farbwechsel, das reicht. */
-  transition: background 0.22s ease, color 0.22s ease, border-color 0.22s ease;
-}
-.tabbar button.active {
-  flex-grow: 1.55;
-  background: var(--gold-grad);
-  color: #14110a;
-  border-color: transparent;
-}
-.tabbar button .ti { transition: transform 0.12s ease; }
-.tabbar button:active .ti { transform: scale(0.9); }
-/* Kurzer Hüpfer beim Anwählen – bewusst KEIN Dauerzustand auf .active, sonst
-   sitzt der gerade gewählte Tab permanent höher/größer als die Nachbarn und
-   die Reihe wirkt uneben. Bewegung markiert die Handlung, nicht den Zustand. */
-@keyframes tabHuepf {
-  0% { transform: none; }
-  40% { transform: translateY(-1.5px) scale(1.08); }
-  100% { transform: none; }
-}
-.tabbar button .ti.huepft { animation: tabHuepf var(--dur-pop) var(--ease-bounce); }
 
-/* ---------- FAB ---------- */
-.fab {
-  position: fixed;
-  right: 18px;
-  bottom: calc(84px + env(safe-area-inset-bottom));
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--gold-grad);
-  color: #14110a;
-  font-size: 26px;
-  font-weight: 700;
-  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.35);
-  z-index: 41;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.fab .ic { width: 26px; height: 26px; }
 
 /* ---------- Modal ---------- */
 .overlay {
@@ -1183,7 +1098,7 @@ mark {
 /* ---------- Sprachnotiz ---------- */
 .voice-bar {
   position: fixed;
-  bottom: calc(94px + env(safe-area-inset-bottom));
+  bottom: calc(26px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -1211,7 +1126,7 @@ mark {
 
 .toast {
   position: fixed;
-  bottom: calc(94px + env(safe-area-inset-bottom));
+  bottom: calc(26px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(16px);
   background: var(--panel-2);
@@ -1275,14 +1190,6 @@ mark {
 }
 .project-card:active, .note-card:active, .agenda-row:active, .tag-row:active { transform: scale(0.985); }
 .chip:active { transform: scale(0.94); }
-.fab { transition: transform var(--dur-tap) var(--ease-bounce), box-shadow 0.2s; }
-.fab:active { transform: scale(0.9); }
-.fab:hover { box-shadow: 0 8px 26px rgba(212, 175, 55, 0.5); }
-/* Der Knopf taucht beim Tabwechsel neu auf (display) – dann spielt das ab.
-   Bewusst ohne opacity: bleibt die Animation je hängen (gedrosselter Tab),
-   ist der Knopf höchstens klein, aber nie unsichtbar. */
-@keyframes fabIn { from { transform: scale(0.5); } to { transform: scale(1); } }
-.fab { animation: fabIn var(--dur-pop) var(--ease-bounce); }
 
 /* Abhaken: Häkchen schnappt rein, ein goldener Ring läuft aus.
    Nur bei der Handlung selbst (.just), nicht bei jedem Neuzeichnen. */
@@ -1312,7 +1219,136 @@ mark {
   }
 }
 
-@media (max-width: 560px) {
-  .summary { grid-template-columns: 1fr 1fr; }
-  .summary .stat:nth-child(3) { grid-column: span 2; }
+
+
+/* ============ OS-Huelle ============
+   Der Home-Bildschirm ist das Modul-Raster als Bedienflaeche: lebende
+   Kacheln, die ihren Stand zeigen, bevor man tippt. Jede App ist ein
+   Vollbild-Schirm, der per FLIP aus seiner Kachel aufzoomt (app.js). */
+
+.kachel-raster { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 700px) { .kachel-raster { grid-template-columns: repeat(3, 1fr); } }
+.kachel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 13px 14px;
+  text-align: left;
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 7px;
+  transition: transform var(--dur-tap) var(--ease-standard), border-color 0.2s ease;
 }
+.kachel:active { transform: scale(0.97); }
+.kachel-name { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 650; color: var(--text); }
+.kachel-name .ic { color: var(--text-dim); width: 17px; height: 17px; }
+.kachel-stat { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+.kachel-heute { grid-column: 1 / -1; border-color: var(--border-gold); min-height: 0; }
+.kachel-heute .kachel-name .ic { color: var(--signal); }
+.kachel-inhalt { font-size: 12.5px; color: var(--text-dim); line-height: 1.65; }
+.kachel-inhalt .sig { color: var(--signal); }
+.kachel-inhalt .heute-leer { color: var(--text-dim); }
+.sig { color: var(--signal); }
+
+/* Einstieg: die Kacheln bauen sich einmal gestaffelt auf, danach Ruhe */
+.kacheln-rein .kachel { animation: riseIn 0.34s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.kacheln-rein .kachel:nth-child(2) { animation-delay: 0.05s; }
+.kacheln-rein .kachel:nth-child(3) { animation-delay: 0.09s; }
+.kacheln-rein .kachel:nth-child(4) { animation-delay: 0.13s; }
+.kacheln-rein .kachel:nth-child(5) { animation-delay: 0.17s; }
+.kacheln-rein .kachel:nth-child(6) { animation-delay: 0.21s; }
+.kacheln-rein .kachel:nth-child(n + 7) { animation-delay: 0.25s; }
+
+/* ---------- App-Schirm: Vollbild ueber allem ---------- */
+.app-schirm {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: var(--bg);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 max(16px, env(safe-area-inset-right)) 44px max(16px, env(safe-area-inset-left));
+  will-change: transform;
+}
+/* Die Zoom-Uebergaenge setzt app.js als Inline-Transform; diese Klasse
+   traegt nur die Kurve. Bewusst KEINE Dauer-Transition auf dem Schirm –
+   sonst wuerde jedes Layout-Ruckeln mitanimiert. */
+.app-schirm.zoomt { transition: transform 0.42s cubic-bezier(0.2, 0.9, 0.25, 1), opacity 0.32s ease; }
+.app-kopf {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 12px calc(-1 * max(16px, env(safe-area-inset-left)));
+  padding: calc(12px + env(safe-area-inset-top)) 12px 9px 6px;
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  touch-action: none;
+}
+.app-zurueck {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--text-dim);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 10px 8px 6px;
+}
+.app-zurueck .ic { width: 17px; height: 17px; }
+.app-titel { font-size: 12.5px; color: var(--text); }
+.app-aktionen { display: flex; align-items: center; gap: 2px; }
+.app-aktionen .btn { min-width: 40px; min-height: 40px; padding: 0; }
+
+/* ---------- Termin-Schnelleingabe (wie To-Do) ---------- */
+.termin-quickadd { display: flex; gap: 8px; margin-bottom: 14px; }
+.termin-quickadd input { flex: 1; }
+.termin-quickadd button { flex-shrink: 0; width: 44px; border-radius: 12px; padding: 0; }
+.termin-quickadd button .ic { width: 21px; height: 21px; }
+
+/* Google-Termine sind Gaeste: lesbar, gekennzeichnet, nicht anfassbar */
+.gast-badge {
+  font-size: 8.5px;
+  color: #666;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+/* ---------- Erledigen: die Farbe verlaesst die Zeile ---------- */
+.todo-row { touch-action: pan-y; }
+.zeilen-sweep {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(200, 240, 74, 0.3), transparent);
+  transform: translateX(-100%);
+  pointer-events: none;
+  animation: zeilenFegen 0.5s ease-out forwards;
+}
+@keyframes zeilenFegen { to { transform: translateX(100%); } }
+/* Wisch-Hinweise hinter der Zeile: rechts erledigt, links loeschen */
+.todo-row .wisch-hinweis {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+}
+.todo-row .wisch-hinweis.rechts { justify-content: flex-start; color: var(--signal); }
+.todo-row .wisch-hinweis.links { justify-content: flex-end; color: var(--danger); }
+.todo-row .zeilen-koerper { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; }
+
+/* ---------- Zahl, die sich meldet, wenn sie sich aendert ---------- */
+.rollt { animation: zahlRein 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2); display: inline-block; }
+@keyframes zahlRein { from { transform: translateY(55%); opacity: 0; } }

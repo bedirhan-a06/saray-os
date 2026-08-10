@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Saray OS</title>
 <meta name="description" content="Saray OS – dein Leben im Blick.">
-<meta name="theme-color" content="#0d0f14">
+<meta name="theme-color" content="#0a0a0a">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -18,26 +18,17 @@
 
 <!-- ================= Icons =================
      Eigene Linien-Icons statt Emojis: gleiche Strichstärke, gleiche Sprache,
-     nehmen per currentColor die Farbe ihrer Umgebung an (Gold, wenn aktiv).
+     nehmen per currentColor die Farbe ihrer Umgebung an (Signal, wenn aktiv).
      i-module ist das Zeichen der App selbst – ein grosser Baustein, zwei
      kleinere daneben. Es steht zugleich fuer die Uebersicht, weil dort alle
      Bausteine zusammenlaufen. -->
 <svg class="sprite" aria-hidden="true">
-  <defs>
-    <!-- userSpaceOnUse: der Verlauf laeuft ueber alle drei Kacheln hinweg,
-         nicht in jeder einzeln – sonst sind es drei Rechtecke statt einem
-         Zeichen, das in Module geschnitten ist. -->
-    <linearGradient id="mark-gold" gradientUnits="userSpaceOnUse" x1="2" y1="2" x2="38" y2="38">
-      <stop offset="0%" stop-color="#f6e7b0"/>
-      <stop offset="45%" stop-color="#d4af37"/>
-      <stop offset="100%" stop-color="#a97f1f"/>
-    </linearGradient>
-  </defs>
-  <!-- Wortmarken-Zeichen (gefuellt, mit Verlauf) -->
+  <!-- Wortmarken-Zeichen: Signal + Weiss auf Schwarz. Die eine weisse
+       Kachel bricht die Flaeche – ohne sie waere es ein Lime-Klumpen. -->
   <symbol id="i-mark" viewBox="0 0 40 40">
-    <rect x="2" y="2" width="21" height="36" rx="6" fill="url(#mark-gold)"/>
-    <rect x="27" y="2" width="11" height="16" rx="4" fill="url(#mark-gold)"/>
-    <rect x="27" y="22" width="11" height="16" rx="4" fill="url(#mark-gold)"/>
+    <rect x="2" y="2" width="21" height="36" rx="6" fill="#c8f04a"/>
+    <rect x="27" y="2" width="11" height="16" rx="4" fill="#c8f04a"/>
+    <rect x="27" y="22" width="11" height="16" rx="4" fill="#f5f5f5"/>
   </symbol>
   <!-- Dasselbe Zeichen als Linien-Icon, fuer Tab-Leiste und Leerzustaende -->
   <symbol id="i-module" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
@@ -162,139 +153,214 @@
   </div>
 </div>
 
-<!-- ================= APP ================= -->
+<!-- ================= APP =================
+     Kein Tab-Wechsel mehr: die App ist ein OS. Unten der Home-Bildschirm mit
+     lebenden Kacheln, jede App ist ein eigener Vollbild-Schirm, der per FLIP
+     aus seiner Kachel aufzoomt (Logik in app.js). Suche und Assistent sind
+     System-Ebene: einmal in der Kopfzeile, einmal im Kopf jeder App. -->
 <div id="app-view" class="hidden">
   <header class="app-header">
     <div class="wm">
       <svg width="26" height="26" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-mark"/></svg>
       <div>
-        <h1 class="marke gold-text">Saray OS</h1>
+        <h1 class="marke signal-text">Saray OS</h1>
         <div class="date" id="today-label"></div>
       </div>
     </div>
     <div class="header-actions">
-      <button class="btn subtle icon-btn" id="assistent-btn" title="Assistent" aria-label="Assistent öffnen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chat"/></svg></button>
-      <button class="btn subtle icon-btn" id="search-btn" title="Alles durchsuchen" aria-label="Alles durchsuchen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg></button>
+      <button class="btn subtle icon-btn sys-assistent" title="Assistent" aria-label="Assistent öffnen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chat"/></svg></button>
+      <button class="btn subtle icon-btn sys-suche" title="Alles durchsuchen" aria-label="Alles durchsuchen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg></button>
       <button class="btn subtle icon-btn" id="voice-btn" title="Sprachnotiz aufnehmen" aria-label="Sprachnotiz aufnehmen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-mic"/></svg></button>
       <button class="btn subtle icon-btn" id="notif-btn" title="Erinnerungen aktivieren" aria-label="Erinnerungen aktivieren"><svg class="ic" viewBox="0 0 24 24"><use href="#i-bell"/></svg></button>
     </div>
   </header>
 
-  <!-- ===== Tab: Übersicht ===== -->
-  <section id="tab-home">
-    <div class="summary list">
-      <div class="stat">
-        <div class="label">Pro Monat</div>
-        <div class="value gold-text" id="monthly-total">–</div>
-        <div class="sub">mein Anteil, Ø monatlich</div>
-      </div>
-      <div class="stat">
-        <div class="label">Pro Jahr</div>
-        <div class="value" id="yearly-total">–</div>
-        <div class="sub">hochgerechnet</div>
-      </div>
-      <div class="stat">
-        <div class="label">To-Dos</div>
-        <div class="value" id="open-todo-count">–</div>
-        <div class="sub">noch offen</div>
-      </div>
-    </div>
-
-    <!-- Überfälliges steht vor der Agenda: es verlangt eine Handlung, keine
-         Kenntnisnahme. Die reinen Zahlen-Panels sitzen unter der Agenda,
-         sonst schieben sie bei voller Nutzung genau das nach unten, wofür
-         dieser Tab da ist. -->
-    <div id="overdue-banner" class="overdue-panel hidden"></div>
-
-    <div class="section-head"><h2 id="agenda-titel">Nächste 7 Tage</h2><span class="head-date" id="agenda-date"></span></div>
-    <div class="chip-row" id="agenda-view-toggle">
-      <button class="chip active" data-view="liste">Liste</button>
-      <button class="chip" data-view="monat">Monat</button>
-    </div>
-    <div class="agenda list" id="agenda-container"></div>
-    <div class="monat hidden" id="monat-container"></div>
-
-    <!-- Geld in einer Zeile, Details auf Wunsch. Vorher waren das zwei
-         dauerhaft offene Panels, die zusammen mehr Platz brauchten als die
-         Agenda darüber. -->
-    <div class="geld hidden" id="geld-panel">
-      <button class="geld-kopf" id="geld-kopf" aria-expanded="false" aria-controls="geld-detail">
-        <span class="geld-zusammenfassung" id="geld-zusammenfassung"></span>
-        <svg class="ic geld-pfeil" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+  <!-- ===== Home: das Modul-Raster als Bildschirm ===== -->
+  <section id="home-screen">
+    <div class="kachel-raster" id="kachel-raster">
+      <button class="kachel kachel-heute" data-app="kalender" id="k-heute">
+        <div class="kachel-name"><svg class="ic" viewBox="0 0 24 24"><use href="#i-module"/></svg><span id="heute-titel">Heute</span></div>
+        <div class="kachel-inhalt" id="heute-inhalt"></div>
       </button>
-      <div class="geld-detail hidden" id="geld-detail">
-        <div class="einnahmen hidden" id="einnahmen-panel"></div>
-        <div class="budget-bar hidden" id="budget-bar">
-          <div class="row">
-            <span>Monatsbudget</span>
-            <span class="amount" id="budget-amount"></span>
-          </div>
-          <div class="budget-track"><div class="budget-fill" id="budget-fill"></div></div>
-          <div class="budget-hint hidden" id="budget-hint">Budget überschritten</div>
+      <button class="kachel" data-app="kalender">
+        <div class="kachel-name"><svg class="ic" viewBox="0 0 24 24"><use href="#i-calendar"/></svg>Kalender</div>
+        <div class="kachel-stat" id="stat-kalender">–</div>
+      </button>
+      <button class="kachel" data-app="aufgaben">
+        <div class="kachel-name"><svg class="ic" viewBox="0 0 24 24"><use href="#i-check"/></svg>Aufgaben</div>
+        <div class="kachel-stat" id="stat-aufgaben">–</div>
+      </button>
+      <button class="kachel" data-app="projekte">
+        <div class="kachel-name"><svg class="ic" viewBox="0 0 24 24"><use href="#i-folder"/></svg>Projekte</div>
+        <div class="kachel-stat" id="stat-projekte">–</div>
+      </button>
+      <button class="kachel" data-app="finanzen">
+        <div class="kachel-name"><svg class="ic" viewBox="0 0 24 24"><use href="#i-card"/></svg>Finanzen</div>
+        <div class="kachel-stat" id="stat-finanzen">–</div>
+      </button>
+      <button class="kachel" data-app="notizen">
+        <div class="kachel-name"><svg class="ic" viewBox="0 0 24 24"><use href="#i-note"/></svg>Notizen</div>
+        <div class="kachel-stat" id="stat-notizen">–</div>
+      </button>
+      <button class="kachel" data-app="optionen">
+        <div class="kachel-name"><svg class="ic" viewBox="0 0 24 24"><use href="#i-sliders"/></svg>Optionen</div>
+        <div class="kachel-stat" id="stat-optionen">Konto, Sperre, Erinnerungen</div>
+      </button>
+    </div>
+  </section>
+
+  <!-- ===== App: Kalender ===== -->
+  <section id="app-kalender" class="app-schirm hidden" data-app="kalender">
+    <div class="app-kopf">
+      <button class="app-zurueck" aria-label="Zurück zum Home"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg>Home</button>
+      <span class="app-titel marke">Kalender</span>
+      <div class="app-aktionen">
+        <button class="btn subtle icon-btn sys-suche" title="Suchen" aria-label="Alles durchsuchen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg></button>
+        <button class="btn subtle icon-btn sys-assistent" title="Assistent" aria-label="Assistent öffnen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chat"/></svg></button>
+      </div>
+    </div>
+    <div class="app-inhalt">
+      <div class="termin-quickadd">
+        <input type="text" id="termin-quick-titel" placeholder="Neuer Termin … („Freitag 14 Uhr“ versteht es)">
+        <button class="btn gold" id="termin-quick-add" title="Eintragen" aria-label="Termin eintragen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="quick-hinweis hidden" id="termin-quick-hinweis"></div>
+      <div class="section-head"><h2 id="agenda-titel">Nächste 7 Tage</h2><span class="head-date" id="agenda-date"></span></div>
+      <div class="chip-row" id="agenda-view-toggle">
+        <button class="chip active" data-view="liste">Liste</button>
+        <button class="chip" data-view="monat">Monat</button>
+      </div>
+      <div class="agenda list" id="agenda-container"></div>
+      <div class="monat hidden" id="monat-container"></div>
+    </div>
+  </section>
+
+  <!-- ===== App: Aufgaben ===== -->
+  <section id="app-aufgaben" class="app-schirm hidden" data-app="aufgaben">
+    <div class="app-kopf">
+      <button class="app-zurueck" aria-label="Zurück zum Home"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg>Home</button>
+      <span class="app-titel marke">Aufgaben</span>
+      <div class="app-aktionen">
+        <button class="btn subtle icon-btn sys-suche" title="Suchen" aria-label="Alles durchsuchen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg></button>
+        <button class="btn subtle icon-btn sys-assistent" title="Assistent" aria-label="Assistent öffnen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chat"/></svg></button>
+      </div>
+    </div>
+    <div class="app-inhalt">
+      <div class="todo-quickadd">
+        <input type="text" id="todo-quick-title" placeholder="Neues To-Do … („morgen“ oder „15.8.“ versteht es)">
+        <input type="date" id="todo-quick-date" title="Fälligkeit (optional)">
+        <button class="btn gold" id="todo-quick-add" title="Hinzufügen" aria-label="Hinzufügen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="quick-hinweis hidden" id="todo-quick-hinweis"></div>
+      <div class="todos list" id="todos-container"></div>
+    </div>
+  </section>
+
+  <!-- ===== App: Projekte ===== -->
+  <section id="app-projekte" class="app-schirm hidden" data-app="projekte">
+    <div class="app-kopf">
+      <button class="app-zurueck" aria-label="Zurück zum Home"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg>Home</button>
+      <span class="app-titel marke">Projekte</span>
+      <div class="app-aktionen">
+        <button class="btn subtle icon-btn" id="projekt-add-btn" title="Projekt anlegen" aria-label="Projekt anlegen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+        <button class="btn subtle icon-btn sys-suche" title="Suchen" aria-label="Alles durchsuchen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg></button>
+        <button class="btn subtle icon-btn sys-assistent" title="Assistent" aria-label="Assistent öffnen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chat"/></svg></button>
+      </div>
+    </div>
+    <div class="app-inhalt">
+      <div class="chip-row" id="project-kind-filter"></div>
+      <div class="cards list" id="projects-container"></div>
+    </div>
+  </section>
+
+  <!-- ===== App: Finanzen (Abos + Einnahmen + Budget + Statistik) ===== -->
+  <section id="app-finanzen" class="app-schirm hidden" data-app="finanzen">
+    <div class="app-kopf">
+      <button class="app-zurueck" aria-label="Zurück zum Home"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg>Home</button>
+      <span class="app-titel marke">Finanzen</span>
+      <div class="app-aktionen">
+        <button class="btn subtle icon-btn" id="abo-add-btn" title="Abo anlegen" aria-label="Abo anlegen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+        <button class="btn subtle icon-btn sys-suche" title="Suchen" aria-label="Alles durchsuchen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg></button>
+        <button class="btn subtle icon-btn sys-assistent" title="Assistent" aria-label="Assistent öffnen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chat"/></svg></button>
+      </div>
+    </div>
+    <div class="app-inhalt">
+      <div class="summary list">
+        <div class="stat">
+          <div class="label">Abos pro Monat</div>
+          <div class="value" id="monthly-total">–</div>
+          <div class="sub">mein Anteil, Ø monatlich</div>
+        </div>
+        <div class="stat">
+          <div class="label">Pro Jahr</div>
+          <div class="value" id="yearly-total">–</div>
+          <div class="sub">hochgerechnet</div>
         </div>
       </div>
+      <div id="overdue-banner" class="overdue-panel hidden"></div>
+      <div class="einnahmen hidden" id="einnahmen-panel"></div>
+      <div class="budget-bar hidden" id="budget-bar">
+        <div class="row">
+          <span>Monatsbudget</span>
+          <span class="amount" id="budget-amount"></span>
+        </div>
+        <div class="budget-track"><div class="budget-fill" id="budget-fill"></div></div>
+        <div class="budget-hint hidden" id="budget-hint">Budget überschritten</div>
+      </div>
+      <div id="savings-banner" class="hint-banner hidden"></div>
+      <div class="section-head">
+        <h2>Meine Abos</h2>
+        <button class="btn subtle" id="ics-btn" title="Zahltermine in Kalender exportieren"><svg class="ic" viewBox="0 0 24 24"><use href="#i-calendar"/></svg>Export</button>
+      </div>
+      <div class="chip-row" id="cat-filter"></div>
+      <div class="cards list" id="cards-container"></div>
+      <div class="section-head"><h2>Kosten nach Kategorie</h2></div>
+      <div class="stats-panel">
+        <div class="donut-wrap">
+          <svg id="donut" width="150" height="150" viewBox="0 0 150 150"></svg>
+          <div class="legend" id="donut-legend"></div>
+        </div>
+      </div>
+      <div class="section-head"><h2>Kostenverlauf (kommende Monate)</h2></div>
+      <div class="stats-panel">
+        <div class="bars" id="bars"></div>
+      </div>
+      <div class="section-head hidden" id="archive-head"><h2>Archiv</h2></div>
+      <div class="cards list" id="archive-container"></div>
     </div>
-
-    <div id="savings-banner" class="hint-banner hidden"></div>
   </section>
 
-  <!-- ===== Tab: Projekte ===== -->
-  <section id="tab-projekte" class="hidden">
-    <div class="section-head"><h2>Meine Projekte</h2></div>
-    <div class="chip-row" id="project-kind-filter"></div>
-    <div class="cards list" id="projects-container"></div>
-  </section>
-
-  <!-- ===== Tab: Abos ===== -->
-  <section id="tab-abos" class="hidden">
-    <div class="section-head">
-      <h2>Meine Abos</h2>
-      <button class="btn subtle" id="ics-btn" title="Zahltermine in Kalender exportieren"><svg class="ic" viewBox="0 0 24 24"><use href="#i-calendar"/></svg>Export</button>
-    </div>
-    <div class="chip-row" id="cat-filter"></div>
-    <div class="cards list" id="cards-container"></div>
-    <div class="section-head"><h2>Kosten nach Kategorie</h2></div>
-    <div class="stats-panel">
-      <div class="donut-wrap">
-        <svg id="donut" width="150" height="150" viewBox="0 0 150 150"></svg>
-        <div class="legend" id="donut-legend"></div>
+  <!-- ===== App: Notizen ===== -->
+  <section id="app-notizen" class="app-schirm hidden" data-app="notizen">
+    <div class="app-kopf">
+      <button class="app-zurueck" aria-label="Zurück zum Home"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg>Home</button>
+      <span class="app-titel marke">Notizen</span>
+      <div class="app-aktionen">
+        <button class="btn subtle icon-btn sys-suche" title="Suchen" aria-label="Alles durchsuchen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg></button>
+        <button class="btn subtle icon-btn sys-assistent" title="Assistent" aria-label="Assistent öffnen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chat"/></svg></button>
       </div>
     </div>
-    <div class="section-head"><h2>Kostenverlauf (kommende Monate)</h2></div>
-    <div class="stats-panel">
-      <div class="bars" id="bars"></div>
+    <div class="app-inhalt">
+      <div class="note-quickadd">
+        <textarea id="note-quick-text" rows="2" placeholder="Gedanke, Idee, Erinnerung … (#tag geht auch)"></textarea>
+        <button class="btn gold" id="note-quick-add">Speichern</button>
+      </div>
+      <div class="chip-row hidden" id="note-tag-filter"></div>
+      <div class="notes list" id="notes-container"></div>
     </div>
-    <div class="section-head hidden" id="archive-head"><h2>Archiv</h2></div>
-    <div class="cards list" id="archive-container"></div>
   </section>
 
-  <!-- ===== Tab: To-Dos ===== -->
-  <section id="tab-todos" class="hidden">
-    <div class="section-head"><h2>Meine To-Dos</h2></div>
-    <div class="todo-quickadd">
-      <input type="text" id="todo-quick-title" placeholder="Neues To-Do … („morgen“ oder „15.8.“ versteht es)">
-      <input type="date" id="todo-quick-date" title="Fälligkeit (optional)">
-      <button class="btn gold" id="todo-quick-add" title="Hinzufügen" aria-label="Hinzufügen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+  <!-- ===== App: Optionen ===== -->
+  <section id="app-optionen" class="app-schirm hidden" data-app="optionen">
+    <div class="app-kopf">
+      <button class="app-zurueck" aria-label="Zurück zum Home"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg>Home</button>
+      <span class="app-titel marke">Optionen</span>
+      <div class="app-aktionen">
+        <button class="btn subtle icon-btn sys-suche" title="Suchen" aria-label="Alles durchsuchen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-search"/></svg></button>
+        <button class="btn subtle icon-btn sys-assistent" title="Assistent" aria-label="Assistent öffnen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-chat"/></svg></button>
+      </div>
     </div>
-    <!-- Zeigt live, was aus dem Text verstanden wurde – bevor gespeichert wird -->
-    <div class="quick-hinweis hidden" id="todo-quick-hinweis"></div>
-    <div class="todos list" id="todos-container"></div>
-  </section>
-
-  <!-- ===== Tab: Notizen ===== -->
-  <section id="tab-notes" class="hidden">
-    <div class="section-head"><h2>Meine Notizen</h2></div>
-    <div class="note-quickadd">
-      <textarea id="note-quick-text" rows="2" placeholder="Gedanke, Idee, Erinnerung … (#tag geht auch)"></textarea>
-      <button class="btn gold" id="note-quick-add">Speichern</button>
-    </div>
-    <div class="chip-row hidden" id="note-tag-filter"></div>
-    <div class="notes list" id="notes-container"></div>
-  </section>
-
-  <!-- ===== Tab: Einstellungen ===== -->
-  <section id="tab-settings" class="hidden">
-    <div class="section-head"><h2>Einstellungen</h2></div>
+    <div class="app-inhalt">
 
     <div class="settings-group">
       <h3>Erinnerungen</h3>
@@ -465,22 +531,8 @@
         <button class="btn danger" id="logout-btn">Abmelden</button>
       </div>
     </div>
+    </div>
   </section>
-
-  <!-- Start ist die Übersicht – dort legt der Knopf nichts an, also erst mal weg -->
-  <button class="fab hidden" id="add-btn" title="Abo hinzufügen" aria-label="Hinzufügen"><svg class="ic" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
-
-  <nav class="tabbar">
-    <button data-tab="home" class="active"><svg class="ti" viewBox="0 0 24 24"><use href="#i-module"/></svg>Übersicht</button>
-    <button data-tab="projekte"><svg class="ti" viewBox="0 0 24 24"><use href="#i-folder"/></svg>Projekte</button>
-    <button data-tab="abos"><svg class="ti" viewBox="0 0 24 24"><use href="#i-card"/></svg>Abos</button>
-    <button data-tab="todos"><svg class="ti" viewBox="0 0 24 24"><use href="#i-check"/></svg>To-Dos</button>
-    <button data-tab="notes"><svg class="ti" viewBox="0 0 24 24"><use href="#i-note"/></svg>Notizen</button>
-    <!-- „Optionen" statt „Einstellungen": das längere Wort passt bei sechs
-         Kacheln auf 375 px nicht in seine Kachel (gemessen 9 px zu breit),
-         und engere Abstände holen nur rund 3 px heraus. -->
-    <button data-tab="settings"><svg class="ti" viewBox="0 0 24 24"><use href="#i-sliders"/></svg>Optionen</button>
-  </nav>
 </div>
 
 <!-- ================= Abo-Modal ================= -->
@@ -720,6 +772,38 @@
     <div class="modal-actions">
       <button class="btn" id="todo-cancel-btn">Abbrechen</button>
       <button class="btn gold" id="todo-save-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= Termin anlegen/bearbeiten ================= -->
+<div class="overlay" id="event-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="event-modal-title">Termin</h2>
+      <button class="btn subtle danger-text" id="event-delete-btn">Löschen</button>
+    </div>
+    <div class="field">
+      <label>Titel</label>
+      <input type="text" id="event-f-title" placeholder="z. B. Zahnarzt">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Datum</label>
+        <input type="date" id="event-f-date">
+      </div>
+      <div class="field">
+        <label>Uhrzeit (optional)</label>
+        <input type="time" id="event-f-time">
+      </div>
+    </div>
+    <div class="field">
+      <label>Notiz (optional)</label>
+      <input type="text" id="event-f-note" placeholder="Details …">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="event-cancel-btn">Abbrechen</button>
+      <button class="btn gold" id="event-save-btn">Speichern</button>
     </div>
   </div>
 </div>
