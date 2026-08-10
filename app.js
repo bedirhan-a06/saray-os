@@ -51,6 +51,9 @@ let activeCat = "Alle";
 let googleFeed = null;    // Zeile aus google_calendar_feeds oder null
 let googleEvents = [];    // Termine aus dem Google-Kalender, fürs Agenda-Fenster
 let events = [];          // eigene Termine (Tabelle events)
+let uniModule = [];       // Uni-Module mit Klausurterminen
+let uniFehler = false;
+let editingModulId = null;
 let fitnessTage = [];     // Split-Tage
 let fitnessUebungen = [];
 let fitnessSaetze = [];   // Satz-Log der letzten ~4 Monate
@@ -537,7 +540,7 @@ async function initAuth() {
     }
     if (event === "SIGNED_OUT") {
       user = null; profile = null; subs = []; todos = []; notes = []; projects = []; events = [];
-      fitnessTage = []; fitnessUebungen = []; fitnessSaetze = []; trainingTagId = null;
+      fitnessTage = []; fitnessUebungen = []; fitnessSaetze = []; trainingTagId = null; uniModule = [];
       googleFeed = null; googleEvents = [];
       assistentVerlauf = [];   // das Gespraech gehoert zur Sitzung, nicht zum Geraet
       localStorage.removeItem(GCAL_CACHE_SCHLUESSEL);
@@ -694,7 +697,7 @@ async function enterApp() {
   // Die sechs Abrufe hängen nicht voneinander ab – nacheinander summierte sich
   // ihre Wartezeit bei jedem App-Start. Nur loadGoogleEvents() braucht den Feed
   // und läuft deshalb erst danach.
-  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadEvents(), loadFitness(), loadGoogleFeed()]);
+  await Promise.all([loadProfile(), loadSubs(), loadTodos(), loadNotes(), loadProjects(), loadEvents(), loadFitness(), loadUni(), loadGoogleFeed()]);
   await loadGoogleEvents();
   zeigeLadeGeruest(false);
   bindSettingsUI();
@@ -785,6 +788,13 @@ async function loadEvents() {
   events = (data || []).map((ev) => ({ ...ev, time: ev.time ? String(ev.time).slice(0, 5) : null }));
 }
 
+async function loadUni() {
+  const { data, error } = await db.from("uni_module").select("*").order("klausur_am");
+  if (error) { uniFehler = true; console.error(error); return; }
+  uniFehler = false;
+  uniModule = (data || []).map((m) => ({ ...m, klausur_um: m.klausur_um ? String(m.klausur_um).slice(0, 5) : null }));
+}
+
 async function loadFitness() {
   // Vier Monate Satz-Historie reichen der App; die Steigerungslogik braucht
   // ohnehin nur den Zustand an der Uebung selbst.
@@ -834,7 +844,7 @@ function fehlerHTML(bereich) {
 
 // Einen Bereich neu abrufen, ohne die ganze App neu zu starten
 async function ladeBereichNeu(bereich) {
-  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects, termine: loadEvents, fitness: loadFitness }[bereich];
+  const lader = { abos: loadSubs, todos: loadTodos, notizen: loadNotes, projekte: loadProjects, termine: loadEvents, fitness: loadFitness, uni: loadUni }[bereich];
   if (!lader) return;
   await lader();
   renderAll();
@@ -909,6 +919,7 @@ function renderAll() {
   renderProjectKindFilter();
   renderProjects();
   renderFitness();
+  renderUni();
   // Donut und Balken sind die teuersten Zeichnungen – nur wenn Finanzen offen ist
   if (aktiveApp === "finanzen") renderStats();
 }
@@ -976,6 +987,9 @@ function heuteZeilen() {
   ];
   termineHeute.slice(0, 3).forEach((t) =>
     zeilen.push(`▪ ${esc(t.title)}${t.time ? ` · ${esc(t.time)}` : ""}`));
+  const klausurBald = naechsteKlausur();
+  if (klausurBald && klausurBald.tage <= 7)
+    zeilen.push(`<span class="sig">▪ Klausur ${esc(klausurBald.m.name)} — ${klausurBald.tage === 0 ? "HEUTE" : klausurBald.tage === 1 ? "morgen" : `in ${klausurBald.tage} Tagen`}</span>`);
   if (fitnessDran()) zeilen.push(`<span class="sig">▪ Gym: ${esc(dranTag().name)} dran</span>`);
   const faellig = overdueSubs();
   if (faellig.length)
@@ -1023,6 +1037,13 @@ function renderHome() {
   const teile = [`Abos ${fmt(monatlich)}/M`];
   if (z.offen > 0) teile.push(`<span class="${z.aeltesteRechnung >= RECHNUNG_MAHNUNG_TAGE ? "sig" : ""}">${esc(fmt(z.offen))} offen</span>`);
   $("stat-finanzen").innerHTML = teile.join(" · ");
+
+  const kl = naechsteKlausur();
+  const offeneErgebnisse = uniModule.filter((m) => m.status === "laeuft" && m.klausur_am && m.klausur_am < heuteStr).length;
+  $("stat-uni").innerHTML = !uniModule.length ? "Module anlegen"
+    : kl ? `${kl.tage <= 7 ? `<span class="sig">Klausur ${kl.tage === 0 ? "HEUTE" : kl.tage === 1 ? "morgen" : `in ${kl.tage} T.`}</span>` : `Klausur ${esc(kurzDatum(new Date(kl.m.klausur_am + "T00:00:00")))}`} · ${esc(kl.m.name)}`
+    : offeneErgebnisse ? `<span class="sig">${offeneErgebnisse === 1 ? "1 Ergebnis" : offeneErgebnisse + " Ergebnisse"} offen</span>`
+    : `${uniModule.filter((m) => m.status === "laeuft").length} Module laufen`;
 
   const fitKachel = $("k-fitness");
   if (fitKachel) {
@@ -1205,6 +1226,11 @@ function agendaItems() {
     const d = new Date(ev.date + "T00:00:00");
     if (d >= heute && d <= grenze) items.push({ art: "termin", datum: d, zeit: ev.time, ev });
   });
+  uniModule.forEach((m) => {
+    if (m.status !== "laeuft" || !m.klausur_am) return;
+    const d = new Date(m.klausur_am + "T00:00:00");
+    if (d >= heute && d <= grenze) items.push({ art: "klausur", datum: d, zeit: m.klausur_um, m });
+  });
   googleEvents.forEach((g) => {
     const d = new Date(g.date + "T00:00:00");
     // Vergangenes interessiert hier nicht – der Kalender ist kein To-Do
@@ -1264,6 +1290,17 @@ function agendaRowHTML(it) {
       ${agendaChip(it.ev.date, it.datum)}
     </div>`;
   }
+  if (it.art === "klausur") {
+    return `
+    <div class="agenda-row" data-art="klausur" data-id="${it.m.id}">
+      <div class="icon">${svgIcon("uni")}</div>
+      <div class="agenda-body">
+        <div class="agenda-title">${esc(it.m.name)}</div>
+        <div class="agenda-meta">Klausur${it.m.klausur_um ? ` · ${esc(it.m.klausur_um)} Uhr` : ""}</div>
+      </div>
+      ${agendaChip(it.m.klausur_am, it.datum)}
+    </div>`;
+  }
   if (it.art === "google") {
     return `
     <div class="agenda-row" data-art="google" data-id="${esc(it.g.uid)}">
@@ -1301,6 +1338,8 @@ function bindAgendaRowClicks(box) {
       el.addEventListener("click", () => openModal(id));
     } else if (el.dataset.art === "termin") {
       el.addEventListener("click", () => openEventModal(id));
+    } else if (el.dataset.art === "klausur") {
+      el.addEventListener("click", () => openModulModal(id));
     }
     // art === "google": bewusst kein Klick-Ziel. Der ICS-Export von Google
     // liefert keine brauchbare Sprungadresse zum einzelnen Termin – ein Link
@@ -1362,6 +1401,11 @@ function agendaItemsImZeitraum(von, bis) {
   events.forEach((ev) => {
     const d = new Date(ev.date + "T00:00:00");
     if (imFenster(d)) items.push({ art: "termin", datum: d, zeit: ev.time, ev });
+  });
+  uniModule.forEach((m) => {
+    if (m.status !== "laeuft" || !m.klausur_am) return;
+    const d = new Date(m.klausur_am + "T00:00:00");
+    if (imFenster(d)) items.push({ art: "klausur", datum: d, zeit: m.klausur_um, m });
   });
   googleEvents.forEach((g) => {
     const d = new Date(g.date + "T00:00:00");
@@ -2424,6 +2468,7 @@ function oeffneEintrag(art, id) {
   else if (art === "todo") openTodoModal(id);
   else if (art === "note") openNoteModal(id);
   else if (art === "termin") openEventModal(id);
+  else if (art === "modul") openModulModal(id);
 }
 
 // Aus der Sammelansicht heraus direkt ins jeweilige Bearbeiten-Fenster
@@ -2575,6 +2620,174 @@ function zeitAusText(roh) {
   const { datum, titel } = datumAusText(text.replace(/\s+/g, " ").trim());
   return { datum, zeit, titel };
 }
+
+/* ================= UNI-PLANER =================
+   Ein Modul je Zeile, die Klausur ist der Termin, der zaehlt. Signal ab
+   sieben Tagen vor der Klausur – frueher waere Rauschen, spaeter zu spaet.
+   Nach der Klausur erinnert die App ans Ergebnis, statt es zu vergessen. */
+
+function naechsteKlausur() {
+  const heuteStr = toDateStr(todayMidnight());
+  const kommende = uniModule
+    .filter((m) => m.status === "laeuft" && m.klausur_am && m.klausur_am >= heuteStr)
+    .sort((a, b) => (a.klausur_am < b.klausur_am ? -1 : 1));
+  if (!kommende.length) return null;
+  const m = kommende[0];
+  const tage = Math.round((new Date(m.klausur_am + "T00:00:00") - todayMidnight()) / 864e5);
+  return { m, tage };
+}
+
+function renderUni() {
+  const box = $("uni-inhalt");
+  if (!box) return;
+  if (uniFehler && !uniModule.length) { box.innerHTML = fehlerHTML("uni"); return; }
+  if (!uniModule.length) {
+    box.innerHTML = `<div class="coach-karte"><div class="coach-titel">Uni</div>
+      <div class="coach-text">Leg deine Module oben an – mit Klausurtermin direkt im Satz:
+      „Analysis II 19.8. 9 Uhr". Klausuren erscheinen dann in Kalender, Übersicht und Erinnerung.</div></div>`;
+    return;
+  }
+  const heuteStr = toDateStr(todayMidnight());
+  const kl = naechsteKlausur();
+  const laufend = uniModule.filter((m) => m.status === "laeuft")
+    .sort((a, b) => (a.klausur_am || "9999") < (b.klausur_am || "9999") ? -1 : 1);
+  const vorbei = uniModule.filter((m) => m.status !== "laeuft");
+
+  const kopf = kl
+    ? `Nächste Klausur: <b>${esc(kl.m.name)}</b> ${kl.tage === 0 ? "— HEUTE" : kl.tage === 1 ? "— morgen" : `in ${kl.tage} Tagen`}${kl.m.klausur_um ? ` um ${esc(kl.m.klausur_um)} Uhr` : ""}.`
+    : `Kein Klausurtermin eingetragen. ${laufend.length ? "Trag ihn ein, sobald er feststeht – dann zählt die App mit." : ""}`;
+
+  const modulZeile = (m) => {
+    const ergebnisOffen = m.status === "laeuft" && m.klausur_am && m.klausur_am < heuteStr;
+    const rechts = m.status === "bestanden" ? `bestanden${m.ergebnis ? ` · ${esc(m.ergebnis)}` : ""}`
+      : m.status === "durchgefallen" ? `<span class="sig">durchgefallen</span>`
+      : ergebnisOffen ? `<span class="sig">Ergebnis eintragen?</span>`
+      : m.klausur_am ? `Klausur ${esc(kurzDatum(new Date(m.klausur_am + "T00:00:00")))}${m.klausur_um ? ` · ${esc(m.klausur_um)}` : ""}`
+      : "kein Termin";
+    return `<button class="fit-uebung" data-modul="${m.id}">
+      <span class="fit-uebung-name">${esc(m.name)}</span>
+      <span class="fit-uebung-ziel">${rechts}</span>
+    </button>`;
+  };
+
+  box.innerHTML = `
+    <div class="coach-karte"><div class="coach-titel">Uni</div><div class="coach-text">${kopf}</div></div>
+    ${laufend.length ? `<div class="section-head"><h2>Läuft</h2></div><div class="list" style="margin-bottom:8px">${laufend.map(modulZeile).join("")}</div>` : ""}
+    ${vorbei.length ? `<div class="section-head"><h2>Abgeschlossen</h2></div><div class="list" style="opacity:.55">${vorbei.map(modulZeile).join("")}</div>` : ""}`;
+  box.querySelectorAll("[data-modul]").forEach((el) =>
+    el.addEventListener("click", () => openModulModal(el.dataset.modul)));
+}
+
+function zeichneModulHinweis() {
+  const el = $("modul-quick-hinweis");
+  const roh = $("modul-quick-name").value.trim();
+  const erkannt = roh ? zeitAusText(roh) : { datum: null, zeit: null, titel: "" };
+  if (!erkannt.datum) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  el.innerHTML = `<span class="chip active">Klausur ${esc(fmtDate(new Date(erkannt.datum + "T00:00:00")))}${erkannt.zeit ? " · " + esc(erkannt.zeit) : ""}</span>` +
+    (erkannt.titel ? "" : ` <span class="quick-warnung">nur ein Datum – der Modulname fehlt</span>`);
+}
+
+async function quickAddModul() {
+  const el = $("modul-quick-name");
+  const roh = el.value.trim();
+  if (!roh) return;
+  const erkannt = zeitAusText(roh);
+  const name = erkannt.datum && erkannt.titel ? erkannt.titel : roh;
+  el.disabled = true;
+  try {
+    const { data, error } = await db.from("uni_module")
+      .insert({ user_id: user.id, name, status: "laeuft",
+                klausur_am: erkannt.datum, klausur_um: erkannt.datum ? erkannt.zeit : null })
+      .select().single();
+    if (error) throw error;
+    data.klausur_um = data.klausur_um ? String(data.klausur_um).slice(0, 5) : null;
+    uniModule.push(data);
+    el.value = "";
+    zeichneModulHinweis();
+    renderAll();
+    showToast("Modul angelegt");
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    el.disabled = false;
+    el.focus();
+  }
+}
+
+function openModulModal(id) {
+  editingModulId = id || null;
+  $("modul-modal-title").textContent = id ? "Modul bearbeiten" : "Modul anlegen";
+  $("modul-delete-btn").classList.toggle("hidden", !id);
+  const m = id ? uniModule.find((x) => x.id === id) : null;
+  $("modul-f-name").value = m ? m.name : "";
+  $("modul-f-datum").value = m?.klausur_am || "";
+  $("modul-f-zeit").value = m?.klausur_um || "";
+  $("modul-f-status").value = m ? m.status : "laeuft";
+  $("modul-f-ergebnis").value = m?.ergebnis || "";
+  $("modul-f-note").value = m?.note || "";
+  oeffneOverlay("modul-overlay");
+  setTimeout(() => $("modul-f-name").focus(), 60);
+}
+function closeModulModal() { schliesseOverlay("modul-overlay"); editingModulId = null; }
+
+async function saveModulModal() {
+  const name = $("modul-f-name").value.trim();
+  if (!name) { showToast("Bitte einen Namen eingeben"); return; }
+  const row = {
+    name,
+    status: $("modul-f-status").value,
+    klausur_am: $("modul-f-datum").value || null,
+    klausur_um: $("modul-f-datum").value ? ($("modul-f-zeit").value || null) : null,
+    ergebnis: $("modul-f-ergebnis").value.trim() || null,
+    note: $("modul-f-note").value.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  const btn = $("modul-save-btn");
+  btn.disabled = true;
+  try {
+    if (editingModulId) {
+      const { data, error } = await db.from("uni_module").update(row).eq("id", editingModulId).select().single();
+      if (error) throw error;
+      data.klausur_um = data.klausur_um ? String(data.klausur_um).slice(0, 5) : null;
+      ersetzeInListe(uniModule, data);
+    } else {
+      const { data, error } = await db.from("uni_module").insert({ ...row, user_id: user.id }).select().single();
+      if (error) throw error;
+      data.klausur_um = data.klausur_um ? String(data.klausur_um).slice(0, 5) : null;
+      uniModule.push(data);
+    }
+    closeModulModal();
+    renderAll();
+    showToast("Gespeichert");
+  } catch (err) {
+    console.error(err);
+    showToast("Fehler beim Speichern");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteModul(id) {
+  const m = uniModule.find((x) => x.id === id);
+  if (!m) return;
+  if (!confirm(`„${m.name}“ wirklich löschen?`)) return;
+  const { error } = await db.from("uni_module").delete().eq("id", id);
+  if (error) { showToast("Fehler beim Löschen"); return; }
+  entferneAusListe(uniModule, id);
+  closeModulModal();
+  renderAll();
+  showToast("Gelöscht");
+}
+
+$("modul-quick-add").addEventListener("click", quickAddModul);
+$("modul-quick-name").addEventListener("keydown", (e) => { if (e.key === "Enter") quickAddModul(); });
+$("modul-quick-name").addEventListener("input", zeichneModulHinweis);
+$("modul-save-btn").addEventListener("click", saveModulModal);
+$("modul-cancel-btn").addEventListener("click", closeModulModal);
+$("modul-delete-btn").addEventListener("click", () => deleteModul(editingModulId));
+$("modul-overlay").addEventListener("click", (e) => { if (e.target.id === "modul-overlay") closeModulModal(); });
 
 /* ================= FITNESS-COACH =================
    Jede Wiederholung wird eingetragen, der Coach rechnet – regelbasiert,
@@ -3268,6 +3481,7 @@ function sucheTreffer(eingabe) {
     todos: sortTodos(todos.filter((t) => passtAufBegriffe(begriffe, t.title, t.description))),
     abos: subs.filter((s) => passtAufBegriffe(begriffe, s.name, s.note, s.category)),
     notizen: notes.filter((n) => passtAufBegriffe(begriffe, n.content)),
+    module: uniModule.filter((m) => passtAufBegriffe(begriffe, m.name, m.ergebnis, m.note)),
     termine: events.filter((ev) => passtAufBegriffe(begriffe, ev.title, ev.note))
       .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0),
     google: googleEvents.filter((g) => passtAufBegriffe(begriffe, g.title))
@@ -3293,6 +3507,7 @@ const BEFEHL_PRAEFIXE = {
   notiz: "note", note: "note",
   abo: "subscription",
   projekt: "project", kunde: "project",
+  uni: "modul", modul: "modul",
 };
 
 function sucheAktionen(eingabe) {
@@ -3306,7 +3521,7 @@ function sucheAktionen(eingabe) {
   return [{ art: "todo", text: roh }, { art: "note", text: roh }];
 }
 
-const AKTION_NAME = { todo: "To-Do", note: "Notiz", subscription: "Abo", project: "Projekt" };
+const AKTION_NAME = { todo: "To-Do", note: "Notiz", subscription: "Abo", project: "Projekt", modul: "Modul" };
 
 function aktionszeileHTML(a, index) {
   const erkannt = a.art === "todo" ? datumAusText(a.text) : null;
@@ -3353,6 +3568,20 @@ async function fuehreAktionAus(a) {
     schliesseSuche();
     openProjectModal(null);
     $("project-f-name").value = a.text;
+  } else if (a.art === "modul") {
+    // Wie die Schnelleingabe in der Uni-App: Datum im Satz wird zur Klausur
+    const erkannt = zeitAusText(a.text);
+    const name = erkannt.datum && erkannt.titel ? erkannt.titel : a.text;
+    const { data, error } = await db.from("uni_module")
+      .insert({ user_id: user.id, name, status: "laeuft",
+                klausur_am: erkannt.datum, klausur_um: erkannt.datum ? erkannt.zeit : null })
+      .select().single();
+    if (error) { showToast("Fehler beim Speichern"); console.error(error); return; }
+    data.klausur_um = data.klausur_um ? String(data.klausur_um).slice(0, 5) : null;
+    uniModule.push(data);
+    renderAll();
+    schliesseSuche();
+    showToast("Modul angelegt");
   }
 }
 
@@ -3399,6 +3628,13 @@ function zeichneSuche() {
       tagRowHTML("note", n.id, svgIcon("note"), hervorheben(notizAusschnitt(n.content, b), b),
         esc(kurzDatum(new Date(n.created_at))))
     ).join(""));
+  }
+  if (erg.module.length) {
+    teile.push(`<div class="tag-sec-head">Uni</div>` + erg.module.map((m) =>
+      tagRowHTML("modul", m.id, svgIcon("uni"), hervorheben(m.name, b),
+        m.status === "laeuft"
+          ? (m.klausur_am ? esc("Klausur " + kurzDatum(new Date(m.klausur_am + "T00:00:00"))) : "läuft")
+          : esc(m.status + (m.ergebnis ? " · " + m.ergebnis : "")))).join(""));
   }
   if (erg.termine.length || erg.google.length) {
     // Eigene Termine sind anfassbar; Google-Termine sind Gaeste – anzeigen ja,
@@ -3765,6 +4001,7 @@ $("backup-btn").addEventListener("click", () => {
     projekte: projects,
     termine: events,
     fitness: { tage: fitnessTage, uebungen: fitnessUebungen, saetze: fitnessSaetze },
+    uni: uniModule,
     profil: profile
   };
   const tag = toDateStr(todayMidnight());

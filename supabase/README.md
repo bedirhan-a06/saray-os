@@ -173,6 +173,20 @@ wird, was geladen ist. Gedacht als Ausweg, falls das Supabase-Projekt einmal
 nicht erreichbar ist; es ist **kein verschlüsseltes Backup**, die Datei liegt im
 Klartext (auch die Notizen, die in der App hinter dem PIN liegen).
 
+## Uni-Planer (Etappe 3)
+
+Tabelle `uni_module`: Name, Status (läuft/bestanden/durchgefallen),
+Klausur-Datum + Uhrzeit, Ergebnis, Notiz. Die Schnelleingabe versteht den
+Termin im Satz („Analysis II 19.8. 9 Uhr"), das Befehlsfeld kann es auch
+(`uni …` / `modul …`).
+
+Klausuren laufender Module erscheinen in Agenda, Monatsansicht, Heute-Kachel
+(Signal ab 7 Tagen vorher), Home-Kachel, Suche und im täglichen Push (v9,
+„🎓 … Klausur HEUTE"). Nach der Klausur erinnert die Modulzeile ans Ergebnis
+(„Ergebnis eintragen?"), statt es zu vergessen; Bestandenes wandert gedimmt
+nach unten und verschwindet aus der Agenda. Der Assistent (v5) kennt alle
+Module samt Klausuren und Ergebnissen.
+
 ## Fitness-Coach (Etappe 2)
 
 Jede Wiederholung wird eingetragen, der Coach rechnet — **regelbasiert, ohne

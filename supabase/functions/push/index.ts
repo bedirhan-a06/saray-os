@@ -178,12 +178,24 @@ async function taeglicherRundlauf() {
       .lte("date", plusTage(tag, vorlauf))
       .order("date");
 
+    // Klausuren im selben Fenster – die wichtigste Erinnerung von allen
+    const { data: klausuren } = await admin
+      .from("uni_module")
+      .select("name, klausur_am, klausur_um")
+      .eq("user_id", p.user_id)
+      .eq("status", "laeuft")
+      .not("klausur_am", "is", null)
+      .gte("klausur_am", tag)
+      .lte("klausur_am", plusTage(tag, vorlauf))
+      .order("klausur_am");
+
     const abos = faellig ?? [];
     const offen = aufgaben ?? [];
     const projekte = deadlines ?? [];
     const ausstehend = rechnungen ?? [];
     const kalender = termine ?? [];
-    if (!abos.length && !offen.length && !projekte.length && !ausstehend.length && !kalender.length) continue;
+    const pruefungen = klausuren ?? [];
+    if (!abos.length && !offen.length && !projekte.length && !ausstehend.length && !kalender.length && !pruefungen.length) continue;
 
     const { data: geraete } = await admin
       .from("push_subscriptions")
@@ -196,6 +208,7 @@ async function taeglicherRundlauf() {
     if (offen.length) teile.push(offen.length === 1 ? "1 To-Do" : `${offen.length} To-Dos`);
     if (projekte.length) teile.push(projekte.length === 1 ? "1 Deadline" : `${projekte.length} Deadlines`);
     if (ausstehend.length) teile.push(ausstehend.length === 1 ? "1 offene Rechnung" : `${ausstehend.length} offene Rechnungen`);
+    if (pruefungen.length) teile.push(pruefungen.length === 1 ? "1 Klausur" : `${pruefungen.length} Klausuren`);
     if (kalender.length) teile.push(kalender.length === 1 ? "1 Termin" : `${kalender.length} Termine`);
     const titel = teile.join(" · ");
 
@@ -213,6 +226,8 @@ async function taeglicherRundlauf() {
         const betrag = Number(r.order_value) > 0 ? ` ${alsEuro(r.order_value)}` : "";
         return `💶 ${r.name}${betrag} – Rechnung seit ${tage} Tagen offen`;
       }),
+      ...pruefungen.map((k) =>
+        `\u{1F393} ${k.name} – Klausur ${k.klausur_am === tag ? "HEUTE" : "am " + alsDeutschesDatum(k.klausur_am)}${k.klausur_um ? ` \u00b7 ${String(k.klausur_um).slice(0, 5)}` : ""}`),
       ...kalender.map((t) =>
         `📅 ${t.title}${t.time ? ` · ${String(t.time).slice(0, 5)}` : ""} (${t.date === tag ? "heute" : "am " + alsDeutschesDatum(t.date)})`),
     ].join("\n");

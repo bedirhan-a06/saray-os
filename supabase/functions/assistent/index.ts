@@ -79,7 +79,7 @@ async function kontext(userId: string) {
   const tag = heute();
   const grenze = plusTage(tag, 7);
 
-  const [{ data: subs }, { data: todos }, { data: projects }, { data: profile }, { data: evts }, { data: fitU }, { data: fitS }] = await Promise.all([
+  const [{ data: subs }, { data: todos }, { data: projects }, { data: profile }, { data: evts }, { data: fitU }, { data: fitS }, { data: module }] = await Promise.all([
     admin.from("subscriptions").select("name, price, vat_percent, next_payment")
       .eq("user_id", userId).eq("archived", false),
     admin.from("todos").select("title, due_date")
@@ -93,6 +93,8 @@ async function kontext(userId: string) {
       .eq("user_id", userId),
     admin.from("fitness_saetze").select("datum")
       .eq("user_id", userId).gte("datum", plusTage(tag, -21)),
+    admin.from("uni_module").select("name, status, klausur_am, klausur_um, ergebnis")
+      .eq("user_id", userId),
   ]);
 
   const brutto = (s: { price: unknown; vat_percent: unknown }) =>
@@ -139,6 +141,10 @@ async function kontext(userId: string) {
       })),
       trainingstage_letzte_3_wochen: [...new Set((fitS ?? []).map((x) => x.datum))].sort(),
     },
+    uni_module: (module ?? []).map((m) => ({
+      name: m.name, status: m.status, klausur_am: m.klausur_am,
+      klausur_um: m.klausur_um ? String(m.klausur_um).slice(0, 5) : null, ergebnis: m.ergebnis,
+    })),
   };
 }
 
@@ -177,7 +183,7 @@ type Nachricht = { rolle: "nutzer" | "assistent"; text: string };
 async function antworte(verlauf: Nachricht[], daten: Record<string, unknown>, key: string) {
   const system =
     `Du bist der Assistent von Saray OS, Bedos persönlichem Life-OS für Abos, To-Dos, ` +
-    `Notizen, Websaray-Projekte und sein Krafttraining. Du kennst nur die Daten unten, sonst nichts über Bedo.\n\n` +
+    `Notizen, Websaray-Projekte, seine Uni-Module samt Klausuren und sein Krafttraining. Du kennst nur die Daten unten, sonst nichts über Bedo.\n\n` +
     `Antworte kurz, in Stichpunkten, kein Geschwafel. Geht die Frage nicht um Bedos Leben ` +
     `oder Websaray, sag das ehrlich und lenk zurück, statt allgemein zu plaudern – du bist kein ` +
     `Ersatz für einen normalen Chat-Assistenten, sondern der Assistent für genau diese App.\n\n` +
